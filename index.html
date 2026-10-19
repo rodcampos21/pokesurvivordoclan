@@ -605,6 +605,7 @@
   <canvas id="slot" width="176" height="170" title="Clic para acelerar"></canvas>
   <div class="pull-results" id="pull-results"></div>
   <button id="pull-close" class="btn gold hidden">Continuar</button>
+  <button id="pull-skip" class="btn small hidden" title="Mostrar o resultado direto">Pular ⏭</button>
 </div>
 
 <!-- ====== Durante la run ====== -->
@@ -668,7 +669,8 @@
 <!-- datos generados -->
 <script src="config.js"></script>
 <script src="js/shiny-halo.js"></script>
-<script defer src="js/app.min.js?v=5b6feb5ad0"></script>
+<script src="js/gacha-skip.js"></script>
+<script defer src="js/app.min.js?v=skip1019"></script>
 <script>(function () { var l = document.getElementById('priv-local'); if (!l) return;
   if (window.PS_FIREBASE && window.PS_FIREBASE.apiKey) { l.remove(); return; }
   for (var n = l.nextElementSibling; n; n = n.nextElementSibling) n.style.display = 'none'; })();</script>
