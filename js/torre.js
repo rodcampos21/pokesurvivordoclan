@@ -36,6 +36,11 @@
   function teamBossExtra(n) { return n > 1 ? 1.4 + 0.1 * (n - 2) : 1; }   // 1 / 1.4 / 1.5 / 1.6
   function teamRate(n) { return 1 + 0.75 * Math.max(0, n - 1); }
 
+  // Vínculos: no modo normal vêm dos rifts (~6 por partida, aos 1:30, 4:30, 7:30…).
+  // Na torre não há rifts; os chefes destes andares dão +1 Vínculo para cada jogador
+  // (mesmo ritmo do modo normal, pelo "tempo virtual" de cada andar).
+  var BOND_FLOORS = { 10: 1, 25: 1, 40: 1, 55: 1, 70: 1, 85: 1 };
+
   var BIOME_BANDS = 20;       // muda o cenário a cada 20 andares
 
   // ---------------------------------------------------------------- estado
@@ -131,7 +136,8 @@
   function floorCleared(players) {
     if (st.floor >= FLOORS) return;
     if (isBossFloor(st.floor)) {
-      say('Chefe derrotado! Andar ' + st.floor + ' concluído', 2.6);
+      if (BOND_FLOORS[st.floor]) say('Chefe derrotado! +1 Vínculo (andar ' + st.floor + ')', 3.2);
+      else say('Chefe derrotado! Andar ' + st.floor + ' concluído', 2.6);
     }
     enterFloor(st.floor + 1, players);
   }
@@ -282,6 +288,18 @@
     if (killsOnFloor() >= st.quota || st.floorT >= FLOOR_MAX_TIME) floorCleared(players);
   }
 
+  // ---------------------------------------------------------------- Vínculo
+  var bondsGiven = {};
+  function giveBond() {
+    var p = PS.Game.player;
+    if (!p) return;
+    p.bonds = (p.bonds || 0) + 1;            // o jogo oferece a escolha sozinho no próximo quadro
+    try {
+      PS.FX.dmgText(p.x, p.y - p.bodyH - 10, '¡Vínculo!', '#ff8ad8', true);
+      PS.FX.ring(p.x, p.y, 8, 90, '#ff8ad8', 0.7, 5);
+    } catch (e) {}
+  }
+
   // ---------------------------------------------------------------- HUD
   var hud = null, lastFloorSeen = 1;
   function ensureHud() {
@@ -350,6 +368,7 @@
       var update = S.update, reset = S.reset, snap = S.snap, restore = S.restore, sayF = S.say;
       S.reset = function () {
         var r = reset.apply(this, arguments);
+        bondsGiven = {};
         if (isTower()) {
           st = fresh();
           st.biome = biomeFor(1);
@@ -386,8 +405,22 @@
       S.say = function (text) {
         var m = /^Andar (\d+)\/100/.exec(text || '');
         if (m) lastFloorSeen = +m[1];
+        var b = /\+1 Vínculo \(andar (\d+)\)/.exec(text || '');
+        if (b && isTower() && !bondsGiven[b[1]]) { bondsGiven[b[1]] = 1; giveBond(); }
         return sayF.apply(this, arguments);
       };
+    });
+
+    // Derrotar um shiny normalmente dá o Pokémon shiny de presente.
+    // Na torre isso fica desligado para os chefes (e o Arceus); shinies selvagens comuns seguem iguais.
+    hookModule(ns, 'onShinyCaught', function (fn) {
+      if (typeof fn !== 'function' || fn.__tower) return;
+      var w = function (e) {
+        if (isTower() && e && (e.boss || e.towerBoss || e.towerArceus)) return;
+        return fn.apply(this, arguments);
+      };
+      w.__tower = true;
+      ns.onShinyCaught = w;
     });
 
     hookModule(ns, 'Rift', function (R) {
