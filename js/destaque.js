@@ -1,10 +1,10 @@
 /* =====================================================================
  * POKÉMON EM DESTAQUE — 5 Pokémon com +15% em todos os atributos,
- * trocando a cada 1 hora REAL. A lista é a mesma para todos os jogadores.
+ * trocando a cada 120 horas REAIS (5 dias). A lista é a mesma para todos os jogadores.
  * ---------------------------------------------------------------------
- * Não precisa de servidor: o sorteio usa como semente o número da hora
- * em UTC (horas desde 1/1/1970). Todo mundo, em qualquer fuso, calcula
- * exatamente os mesmos 5 Pokémon, e eles trocam juntos na virada da hora.
+ * Não precisa de servidor: o sorteio usa como semente o número do período
+ * de 120 h contado em UTC desde 1/1/1970. Todo mundo, em qualquer fuso,
+ * calcula exatamente os mesmos 5 Pokémon, e eles trocam juntos na virada.
  *
  * O bônus vale para o Pokémon com que você COMEÇA a partida, se ele
  * estiver na lista nesse momento, e dura a partida inteira.
@@ -14,7 +14,8 @@
 
   var COUNT = 5;
   var BONUS = 0.15;
-  var HOUR = 3600 * 1000;
+  var PERIOD_HOURS = 120;          // duração de cada lista de destaque
+  var HOUR = PERIOD_HOURS * 3600 * 1000;   // (nome antigo: é o período inteiro)
   var SALT = 0x5eed1d;            // muda a sequência se um dia quiser "re-embaralhar"
 
   var PS = null;
@@ -115,7 +116,7 @@
     p.hourBuff = 0; p._hbHp = p._hbDef = p._hbRgn = p._hbCrit = 0;
     var name = (PS.DEX_BY[buffDex(p)] || {}).name || '';
     try {
-      PS.Spawner.say('A hora de ' + name + ' acabou: bônus de destaque removido', 3.4, true);
+      PS.Spawner.say('O destaque de ' + name + ' acabou: bônus removido', 3.4, true);
       PS.FX.dmgText(p.x, p.y - p.bodyH - 12, '-15%', '#ff8a8a', true);
     } catch (e) {}
   }
@@ -167,9 +168,12 @@
     '@media (max-height:520px){.dq-mon canvas{width:40px;height:40px}.dq-board{margin:6px 0 2px;padding:6px}}';
 
   function fmt(ms) {
-    var s = Math.max(0, Math.floor(ms / 1000)), m = Math.floor(s / 60);
-    s %= 60;
-    return m + ':' + (s < 10 ? '0' : '') + s;
+    var s = Math.max(0, Math.floor(ms / 1000));
+    var d = Math.floor(s / 86400); s -= d * 86400;
+    var h = Math.floor(s / 3600); s -= h * 3600;
+    var m = Math.floor(s / 60); s -= m * 60;
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return (d ? d + 'd ' : '') + z(h) + ':' + z(m) + ':' + z(s);
   }
 
   var boards = [];
@@ -179,7 +183,7 @@
     el.className = 'dq-board' + (compact ? ' compact' : '');
     el.setAttribute('translate', 'no');
     el.innerHTML = '<div class="dq-title">★ Pokémon em destaque ★</div>' +
-      '<div class="dq-sub">+15% nos atributos durante esta hora</div>' +
+      '<div class="dq-sub">+15% nos atributos · troca a cada 5 dias</div>' +
       '<div class="dq-list"></div><div class="dq-time"></div>';
     if (before && before.parentNode === host) host.insertBefore(el, before); else host.appendChild(el);
     boards.push({ el: el, hour: -1 });
