@@ -136,7 +136,7 @@
   function floorCleared(players) {
     if (st.floor >= FLOORS) return;
     var f = st.floor, parts = [];
-    if (isBossFloor(f)) parts.push('item para cada jogador');
+    if (isBossFloor(f)) parts.push('item individual');
     if (f % BOND_EVERY === 0) parts.push('+1 Vínculo');
     // o aviso vai para todos (no coop o anfitrião o transmite); cada jogador
     // recebe a própria recompensa ao ver o aviso (ver S.say mais abaixo)
