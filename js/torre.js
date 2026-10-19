@@ -41,7 +41,6 @@
   var BOND_EVERY = 3;
   // Itens: cada chefe derrotado dá um item sorteado para CADA jogador (individual).
 
-  var BIOME_BANDS = 20;       // muda o cenário a cada 20 andares
 
   // ---------------------------------------------------------------- estado
   var PS = null;
@@ -88,10 +87,19 @@
     var p = PS.Game.player;
     return p ? Math.max(0, (p.kills || 0) - st.kills0) : 0;
   }
+  // Cenário: troca a cada chefe derrotado, em loop sem repetir
+  // (andares 1-5 no 1º mapa, 6-10 no 2º, … e depois de todos volta ao 1º).
+  function mapLoop() {
+    var list = [0, 1, 2];                       // Bosque Umbrío, Cueva Cristal, Volcán Ceniza
+    try { list = list.concat(PS.Tiles.ZZ); } catch (e) {}   // + Zona Cero (3 cenários)
+    return list;
+  }
   function biomeFor(f) {
-    var list = [0, 1, 2];
-    try { list = list.concat(PS.Tiles.ZZ); } catch (e) {}
-    return list[Math.min(list.length - 1, Math.floor((f - 1) / BIOME_BANDS))];
+    var list = mapLoop();
+    return list[Math.floor((f - 1) / BOSS_EVERY) % list.length];
+  }
+  function biomeName(b) {
+    try { return PS.T(PS.Tiles.BIOMES[b].name); } catch (e) { return ''; }
   }
   function say(t, d) { try { PS.Spawner.say(t, d || 3); } catch (e) {} }
   function isBossFloor(f) { return f % BOSS_EVERY === 0 && f < FLOORS; }
@@ -111,13 +119,12 @@
     st.kills0 = PS.Game.player ? (PS.Game.player.kills || 0) : 0;
     st.quota = quotaFor(f, players.length || teamSize());
 
-    var b = biomeFor(f);
+    var b = biomeFor(f), newMap = '';
     if (b !== st.biome) {
       st.biome = b;
       if (f > 1) {
-        try {
-          PS.World.setBiome(b);
-        } catch (e) {}
+        try { PS.World.setBiome(b); } catch (e) {}
+        newMap = ' · ' + biomeName(b);
       }
     }
 
@@ -128,7 +135,7 @@
       say('Andar ' + f + '/100 · Chefe shiny!', 3.5);
       spawnFloorBoss(players);
     } else {
-      say('Andar ' + f + '/100', 2.4);
+      say('Andar ' + f + '/100' + newMap, newMap ? 3.4 : 2.4);
     }
     try { PS.Audio.sfx(f % BOSS_EVERY === 0 ? 'boss' : 'levelup'); } catch (e) {}
   }
