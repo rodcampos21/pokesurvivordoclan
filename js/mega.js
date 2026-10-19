@@ -37,6 +37,8 @@
   var aura = new Image(); aura.src = 'assets/ui/mega-aura.webp';
 
   var st = { active: false, t: 0, cd: 0, fx: null, p: null };
+  var remoteFx = [];            // auras dos colegas no coop: { pl, t, kind, swapped }
+  var remoteOn = {};            // uid -> 0/1 (último estado recebido)
 
   function player() { return PS && PS.Game && PS.Game.player; }
   function playing() { var s = PS && PS.Game && PS.Game.state; return s === 'playing' || s === 'held'; }
@@ -99,6 +101,7 @@
     st.p = p;
     st.fx = { t: 0, swapped: false, kind: 'in' };
     p.invuln = Math.max(p.invuln || 0, 1.6);       // protegido durante a transformação
+    netSend(1);
     try {
       PS.Audio.sfx('legend');
       PS.Camera.kick(0.8);
@@ -132,16 +135,77 @@
         } catch (e) {}
       }
     }
+    if (st.active) netSend(0);
     st.active = false; st.t = 0; st.cd = silent ? 0 : COOLDOWN;
     if (silent) st.fx = null;
   }
 
-  function resetAll() { st = { active: false, t: 0, cd: 0, fx: null, p: null }; }
+  function resetAll() {
+    st = { active: false, t: 0, cd: 0, fx: null, p: null };
+    remoteFx = []; remoteOn = {}; hbT = 0;
+  }
+
+  // ------------------------------------------------------------ coop
+  // Cada jogador avisa "estou/não estou Mega" (na hora e a cada 2 s, para quem
+  // entrou depois ou perdeu a mensagem). Convidados mandam ao anfitrião, que
+  // repassa aos outros. Quem recebe só troca o sprite do fantoche e mostra a aura;
+  // o bônus de +50% vale no jogo de quem Mega Evoluiu (é ele quem causa o dano).
+  var hbT = 0;
+  function coopOn() { return !!(PS.Coop && PS.Coop.active && PS.Net); }
+  function netSend(on) {
+    if (!coopOn()) return;
+    var msg = { k: 'mega', u: PS.Coop.me, on: on ? 1 : 0 };
+    try { if (PS.Coop.isHost) PS.Net.broadcast(msg); else PS.Net.toHost(msg); } catch (e) {}
+  }
+  function onNet(from, msg) {
+    if (!msg || msg.k !== 'mega') return;
+    var uid = msg.u || from;
+    if (!coopOn() || uid === PS.Coop.me) return;
+    if (PS.Coop.isHost && from && from !== PS.Coop.me) {
+      try { PS.Net.broadcast(msg, from); } catch (e) {}       // repassa aos outros convidados
+    }
+    applyRemote(uid, !!msg.on);
+  }
+  function applyRemote(uid, on) {
+    var m = PS.Coop.mate && PS.Coop.mate(uid), pl = m && m.pl;
+    remoteOn[uid] = on ? 1 : 0;
+    if (!pl) return;
+    var isMega = !!pl._megaMon;
+    if (on && !isMega && !remoteFx.some(function (f) { return f.pl === pl && f.kind === 'in'; })) {
+      remoteFx.push({ pl: pl, t: 0, kind: 'in', swapped: false });
+    } else if (!on && isMega) {
+      setSkin(pl, false);
+      remoteFx = remoteFx.filter(function (f) { return f.pl !== pl; });
+      remoteFx.push({ pl: pl, t: 1.36, kind: 'out', swapped: true });
+    }
+  }
+  function tickRemote(dt) {
+    if (!coopOn()) { remoteFx = []; return; }
+    for (var i = remoteFx.length - 1; i >= 0; i--) {
+      var f = remoteFx[i];
+      f.t += dt;
+      var fr = Math.floor(f.t * AURA_FPS);
+      if (f.kind === 'in' && !f.swapped && fr >= SWAP_AT) {
+        f.swapped = true;
+        if (!f.pl._megaMon) setSkin(f.pl, true);
+        try { PS.FX.ring(f.pl.x, f.pl.y, 10, 140, '#5fd4ff', 0.8, 6); } catch (e) {}
+      }
+      if (fr >= AURA_N) remoteFx.splice(i, 1);
+    }
+    // repete o próprio estado a cada 2 s
+    hbT -= dt;
+    if (hbT <= 0) {
+      hbT = 2;
+      var p = player();
+      if (p && (p.dex === BASE_DEX || st.active)) netSend(st.active || (st.fx && st.fx.kind === 'in') ? 1 : 0);
+    }
+  }
 
   // ------------------------------------------------------------ relógio (só corre em jogo)
   function tick(dt) {
     var p = player();
     if (!p) return;
+    try { tickRemote(dt); } catch (e) { console.error('[mega coop]', e); }
     if (st.p && st.p !== p) resetAll();
     if (st.fx) {
       st.fx.t += dt;
@@ -157,22 +221,27 @@
   }
 
   // ------------------------------------------------------------ desenho da aura (no mundo)
-  function auraDrawable() {
-    var p = st.p;
-    if (!st.fx || !p || !aura.complete || !aura.naturalWidth) return null;
+  function auraFor(pl, t) {
     return {
-      y: p.y + 3,                                  // desenhado logo à frente do Charizard
+      y: pl.y + 3,                                 // desenhado logo à frente do Charizard
       draw: function (ctx) {
-        var f = Math.min(AURA_N - 1, Math.floor(st.fx.t * AURA_FPS));
-        var size = Math.max(150, (p.bodyH || 60) * 2.6);
+        var f = Math.min(AURA_N - 1, Math.floor(t * AURA_FPS));
+        var size = Math.max(150, (pl.bodyH || 60) * 2.6);
         var sc = size / CELL;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 0.95;
-        ctx.drawImage(aura, f * CELL, 0, CELL, CELL, p.x - size / 2, p.y - FEET_Y * sc, size, size);
+        ctx.drawImage(aura, f * CELL, 0, CELL, CELL, pl.x - size / 2, pl.y - FEET_Y * sc, size, size);
         ctx.restore();
       }
     };
+  }
+  function auraDrawables() {
+    if (!aura.complete || !aura.naturalWidth) return [];
+    var out = [];
+    if (st.fx && st.p) out.push(auraFor(st.p, st.fx.t));
+    remoteFx.forEach(function (f) { if (f.pl && !f.pl.dead) out.push(auraFor(f.pl, f.t)); });
+    return out;
   }
 
   // ------------------------------------------------------------ botão (HUD)
@@ -254,8 +323,8 @@
     var drw = PS.Training.drawables;
     PS.Training.drawables = function () {
       var list = drw.apply(this, arguments) || [];
-      var d = auraDrawable();
-      return d ? list.concat([d]) : list;
+      var d = auraDrawables();
+      return d.length ? list.concat(d) : list;
     };
     // tecla F
     window.addEventListener('keydown', function (e) {
@@ -265,14 +334,17 @@
       activate();
     });
 
+    if (PS.Net && PS.Net.on) PS.Net.on(onNet);
+
     PS.Sprites.preload([SKIN], 8000, false);
     requestAnimationFrame(uiLoop);
-    window.__mega = { state: function () { return st; }, activate: activate };
+    window.__mega = { state: function () { return st; }, activate: activate,
+      _test: { onNet: onNet, remote: function () { return { fx: remoteFx, on: remoteOn }; } } };
   }
 
   var wait = setInterval(function () {
     var ns = window.__PS;
-    if (ns && ns.SPRITE_META && ns.Sprites && ns.Stats && ns.Game && ns.Training && ns.Player) {
+    if (ns && ns.SPRITE_META && ns.Sprites && ns.Stats && ns.Game && ns.Training && ns.Player && ns.Coop && ns.Net) {
       clearInterval(wait);
       PS = ns;
       install();
