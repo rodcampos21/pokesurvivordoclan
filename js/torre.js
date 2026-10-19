@@ -36,10 +36,10 @@
   function teamBossExtra(n) { return n > 1 ? 1.4 + 0.1 * (n - 2) : 1; }   // 1 / 1.4 / 1.5 / 1.6
   function teamRate(n) { return 1 + 0.75 * Math.max(0, n - 1); }
 
-  // Vínculos: no modo normal vêm dos rifts (~6 por partida, aos 1:30, 4:30, 7:30…).
-  // Na torre não há rifts; os chefes destes andares dão +1 Vínculo para cada jogador
-  // (mesmo ritmo do modo normal, pelo "tempo virtual" de cada andar).
-  var BOND_FLOORS = { 10: 1, 25: 1, 40: 1, 55: 1, 70: 1, 85: 1 };
+  // Vínculos: no modo normal vêm dos rifts. Na torre (sem rifts), cada jogador
+  // ganha +1 Vínculo a cada 3 andares concluídos (3, 6, 9, … 99).
+  var BOND_EVERY = 3;
+  // Itens: cada chefe derrotado dá um item sorteado para CADA jogador (individual).
 
   var BIOME_BANDS = 20;       // muda o cenário a cada 20 andares
 
@@ -135,11 +135,13 @@
 
   function floorCleared(players) {
     if (st.floor >= FLOORS) return;
-    if (isBossFloor(st.floor)) {
-      if (BOND_FLOORS[st.floor]) say('Chefe derrotado! +1 Vínculo (andar ' + st.floor + ')', 3.2);
-      else say('Chefe derrotado! Andar ' + st.floor + ' concluído', 2.6);
-    }
-    enterFloor(st.floor + 1, players);
+    var f = st.floor, parts = [];
+    if (isBossFloor(f)) parts.push('item para cada jogador');
+    if (f % BOND_EVERY === 0) parts.push('+1 Vínculo');
+    // o aviso vai para todos (no coop o anfitrião o transmite); cada jogador
+    // recebe a própria recompensa ao ver o aviso (ver S.say mais abaixo)
+    if (parts.length) say('Recompensa do andar ' + f + ': ' + parts.join(' · '), 3.2);
+    enterFloor(f + 1, players);
   }
 
   // ---------------------------------------------------------------- chefes
@@ -289,7 +291,7 @@
   }
 
   // ---------------------------------------------------------------- Vínculo
-  var bondsGiven = {};
+  var rewardsGiven = {};
   function giveBond() {
     var p = PS.Game.player;
     if (!p) return;
@@ -298,6 +300,17 @@
       PS.FX.dmgText(p.x, p.y - p.bodyH - 10, '¡Vínculo!', '#ff8ad8', true);
       PS.FX.ring(p.x, p.y, 8, 90, '#ff8ad8', 0.7, 5);
     } catch (e) {}
+  }
+
+  function giveItem() {
+    var p = PS.Game.player;
+    if (!p || p.dead || !isTower()) return;
+    var id = PS.Items.roll(p.item);           // sorteia um item diferente do que já carrega
+    try {
+      PS.FX.dmgText(p.x, p.y - p.bodyH - 26, 'Item!', '#9ae6ff', true);
+      PS.Audio.sfx('shinyGet');
+    } catch (e) {}
+    PS.Game.giveItem(id);                     // equipa, ou pergunta se quer trocar
   }
 
   // ---------------------------------------------------------------- HUD
@@ -368,7 +381,7 @@
       var update = S.update, reset = S.reset, snap = S.snap, restore = S.restore, sayF = S.say;
       S.reset = function () {
         var r = reset.apply(this, arguments);
-        bondsGiven = {};
+        rewardsGiven = {};
         if (isTower()) {
           st = fresh();
           st.biome = biomeFor(1);
@@ -405,8 +418,12 @@
       S.say = function (text) {
         var m = /^Andar (\d+)\/100/.exec(text || '');
         if (m) lastFloorSeen = +m[1];
-        var b = /\+1 Vínculo \(andar (\d+)\)/.exec(text || '');
-        if (b && isTower() && !bondsGiven[b[1]]) { bondsGiven[b[1]] = 1; giveBond(); }
+        var r = /^Recompensa do andar (\d+): (.*)$/.exec(text || '');
+        if (r && isTower() && !rewardsGiven[r[1]]) {
+          rewardsGiven[r[1]] = 1;
+          if (r[2].indexOf('Vínculo') >= 0) giveBond();
+          if (r[2].indexOf('item') >= 0) setTimeout(giveItem, 700);
+        }
         return sayF.apply(this, arguments);
       };
     });
