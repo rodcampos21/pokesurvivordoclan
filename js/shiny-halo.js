@@ -1,12 +1,12 @@
-/* Auréola de estrelas girando sobre Pokémon shiny específicos (teste).
+/* Auréola de estrelas girando sobre todos os Pokémon shiny.
  * Funciona "por fora" do jogo: quando o jogo desenha no canvas um sprite shiny
  * (assets/pokemon/<dex>/s/...), desenhamos a auréola animada logo em cima.
  */
 (function () {
   'use strict';
 
-  // Pokédex dos Pokémon que ganham a auréola (Charmander, Charmeleon, Charizard)
-  var DEX = { 4: true, 5: true, 6: true };
+  // null = todos os shiny. Para limitar, use por ex. { 4: true, 5: true, 6: true }
+  var DEX = null;
 
   var FRAMES = 8;          // quadros na folha
   var FPS = 10;            // velocidade da animação
@@ -18,14 +18,14 @@
   halo.onload = function () { ready = true; };
   halo.src = 'assets/ui/shiny-halo.webp';
 
-  var re = /assets\/pokemon\/(\d+)\/s\//;
+  var re = /assets\/pokemon\/([^\/]+)\/s\//;
   var cache = new WeakMap();
   function wanted(img) {
     if (!(img instanceof HTMLImageElement)) return false;
     var v = cache.get(img);
     if (v === undefined || v.src !== img.src) {
       var m = re.exec(img.src);
-      v = { src: img.src, ok: !!(m && DEX[+m[1]]) };
+      v = { src: img.src, ok: !!(m && (!DEX || DEX[parseInt(m[1], 10)])) };
       cache.set(img, v);
     }
     return v.ok;
