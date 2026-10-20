@@ -15,14 +15,14 @@
     {
       id: 'megax6', base: 6, skin: '6_megax', name: 'Mega Charizard X',
       types: ['fire', 'dragon'], bonus: 0.5,
-      info: 'Durante a partida com Charizard, use o botão da Mega (tecla F): ' +
-        '30 s com +50% em todos os atributos · recarga de 50 s.'
+      info: 'During a run with Charizard, use the Mega button (F key): ' +
+        '+50% to all stats for 30 s · 50 s cooldown.'
     },
     {
       id: 'mega94', base: 94, skin: '94_mega', name: 'Mega Gengar',
       types: ['ghost', 'poison'], bonus: 0.5,
-      info: 'Durante a partida com Gengar, use o botão da Mega (tecla F): ' +
-        '30 s com +50% em todos os atributos · recarga de 50 s.'
+      info: 'During a run with Gengar, use the Mega button (F key): ' +
+        '+50% to all stats for 30 s · 50 s cooldown.'
     }
   ];
 
@@ -94,7 +94,7 @@
       grid.appendChild(cell);
     });
     if (!shown.length) {
-      grid.innerHTML = '<p class="sub" style="grid-column:1/-1">Ninguno con este filtro.</p>';
+      grid.innerHTML = '<p class="sub" style="grid-column:1/-1" translate="no">None with this filter.</p>';
     }
     detail(MEGAS[shown.indexOf(sel) >= 0 ? sel : (shown[0] || 0)]);
   }
@@ -111,7 +111,7 @@
     var html =
       '<canvas id="dex-big" class="stage" width="220" height="190"></canvas>' +
       '<div class="center">' +
-      '<div style="color:var(--muted);font-size:13px" translate="no">' + (have ? 'Mega Evolução · ' + b.name : 'Mega Evolução') + '</div>' +
+      '<div style="color:var(--muted);font-size:13px" translate="no">' + (have ? 'Mega Evolution · ' + b.name : 'Mega Evolution') + '</div>' +
       '<h3 translate="no">' + (have ? m.name : '???') + '</h3>' +
       '<div style="color:' + PS.Gacha.RARITY_COLOR[st.rarity] + '">' + PS.UI.stars(st.rarity, 24) + ' ' +
       PS.Gacha.RARITY_NAME[st.rarity] + '</div>' +
@@ -119,15 +119,15 @@
       '</div>';
     if (have) {
       html +=
-        bar('Vida', st.hp, MAX_HP, st.hp + '') +
-        bar('Ataque', st.atk, MAX_ATK, '×' + st.atk.toFixed(2) + '') +
-        bar('Velocidad', st.spd, MAX_SPD, st.spd + '') +
-        '<p translate="no" style="font-size:13px;color:var(--muted);margin:6px 0 2px">Os atributos de ' + b.name +
-        ' com +50% (vida, ataque, velocidade, recarga, defesa, regeneração, crítico, ímã e experiência).</p>' +
+        bar('HP', st.hp, MAX_HP, st.hp + '') +
+        bar('Attack', st.atk, MAX_ATK, '×' + st.atk.toFixed(2) + '') +
+        bar('Speed', st.spd, MAX_SPD, st.spd + '') +
+        '<p translate="no" style="font-size:13px;color:var(--muted);margin:6px 0 2px">' + b.name +
+        "'s stats with +50% (HP, attack, speed, cooldown, defense, regeneration, crit, magnet and experience).</p>" +
         '<p translate="no" style="font-size:14px;margin:8px 0 4px">' + m.info + '</p>';
     } else {
-      html += '<p class="center" style="color:var(--muted)">Aún no lo tienes.</p>' +
-        '<p class="center" translate="no" style="color:var(--muted);margin-top:-4px">Obtenha o Pokémon base para desbloquear esta Mega Evolução.</p>';
+      html += '<p class="center" style="color:var(--muted)" translate="no">You don\'t have it yet.</p>' +
+        '<p class="center" translate="no" style="color:var(--muted);margin-top:-4px">Get the base Pokémon to unlock this Mega Evolution.</p>';
     }
     box.innerHTML = html;
     var cv = box.querySelector('#dex-big');

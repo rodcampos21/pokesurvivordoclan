@@ -56,7 +56,7 @@
 
   var MAP = {
     n: TOWER,
-    name: 'Torre Sem Fim',
+    name: 'Endless Tower',
     tower: true,
     get biome() { return biomeFor(st.floor); },
     types: ['normal', 'fire', 'water', 'grass', 'electric', 'ice', 'fighting', 'poison', 'ground',
@@ -67,7 +67,7 @@
     get k() { return inRun() ? kFor(st.floor) : kFor(1); },
     get dk() { return inRun() ? dkFor(st.floor) : dkFor(1); },
     bonus: 0.5,
-    diff: 'Torre',
+    diff: 'Tower',
     col: '#ffd23f'
   };
 
@@ -94,7 +94,7 @@
   // Piso de lajotas e tochas nas paredes são desenhados por cima (ver castleGround).
   var HELL = [
     { // Salão das Brasas: pedra escura, fossos de lava, brasas no chão
-      name: 'Salão das Brasas', liquid: 'lava',
+      name: 'Hall of Embers', liquid: 'lava',
       floor: ['#1b1517', '#1f181a', '#181214'], dirt: ['#151012', '#181214', '#120e10'],
       speck: '#110c0e', light: '#2c2023', flowers: ['#7a1e0e', '#a8380f', '#5a1010'],
       wallTop: ['#2a2226', '#30272b', '#251e21'], wallLight: '#4a3c42', wallEdge: '#030202',
@@ -105,7 +105,7 @@
       castle: { tile: '#0b0809', tileHi: '#2a2124' }
     },
     { // Cripta das Cinzas: pedra cinza-chumbo, canais de sangue
-      name: 'Cripta das Cinzas', liquid: 'lava',
+      name: 'Crypt of Ashes', liquid: 'lava',
       floor: ['#1c1b1e', '#201f22', '#18171a'], dirt: ['#161518', '#19181b', '#131215'],
       speck: '#121114', light: '#2e2c31', flowers: ['#3a3438', '#5a1414', '#2a2628'],
       wallTop: ['#26252a', '#2c2b30', '#222126'], wallLight: '#44424a', wallEdge: '#020203',
@@ -116,7 +116,7 @@
       castle: { tile: '#09090b', tileHi: '#2b2a2f' }
     },
     { // Trono Carmesim: mármore negro-arroxeado, poços de miasma, cristais de sangue
-      name: 'Trono Carmesim', liquid: 'poison',
+      name: 'Crimson Throne', liquid: 'poison',
       floor: ['#170c13', '#1b0e16', '#140a10'], dirt: ['#12080e', '#150a10', '#10070c'],
       speck: '#0e060b', light: '#2c1222', flowers: ['#6a0a1e', '#8a1030', '#4a0816'],
       wallTop: ['#1f1019', '#25131e', '#1b0e16'], wallLight: '#43243a', wallEdge: '#020001',
@@ -175,13 +175,13 @@
       setTimeout(function () { if (isTower() && st === runId && inRun()) wrathAnnounce(f); }, 2600);
     }
     if (f === FLOORS) {
-      say('Andar 100/100 · O topo da torre…', 4);
+      say('Floor 100/100 · The top of the tower…', 4);
       spawnArceus(players);
     } else if (isBossFloor(f)) {
-      say('Andar ' + f + '/100 · Chefe shiny!', 3.5);
+      say('Floor ' + f + '/100 · Shiny boss!', 3.5);
       spawnFloorBoss(players);
     } else {
-      say('Andar ' + f + '/100' + newMap, newMap ? 3.4 : 2.4);
+      say('Floor ' + f + '/100' + newMap, newMap ? 3.4 : 2.4);
     }
     try { PS.Audio.sfx(f % BOSS_EVERY === 0 ? 'boss' : 'levelup'); } catch (e) {}
   }
@@ -189,11 +189,11 @@
   function floorCleared(players) {
     if (st.floor >= FLOORS) return;
     var f = st.floor, parts = [];
-    if (isBossFloor(f)) parts.push('item individual');
-    if (f % BOND_EVERY === 0) parts.push('+1 Vínculo');
+    if (isBossFloor(f)) parts.push('individual item');
+    if (f % BOND_EVERY === 0) parts.push('+1 Bond');
     // o aviso vai para todos (no coop o anfitrião o transmite); cada jogador
     // recebe a própria recompensa ao ver o aviso (ver S.say mais abaixo)
-    if (parts.length) say('Recompensa do andar ' + f + ': ' + parts.join(' · '), 3.2);
+    if (parts.length) say('Floor ' + f + ' reward: ' + parts.join(' · '), 3.2);
     enterFloor(f + 1, players);
   }
 
@@ -300,7 +300,7 @@
     PS.EnemyMgr.add(e);
     st.boss = e;
     try { PS.Sprites.preload([m.dex], 4000, true); } catch (er) {}
-    say(e.name + ' shiny apareceu! (andar ' + st.floor + ')', 3.4);
+    say('Shiny ' + e.name + ' appeared! (floor ' + st.floor + ')', 3.4);
     try { PS.Camera.kick(1.1); PS.Audio.sfx('boss'); } catch (er) {}
   }
 
@@ -337,7 +337,7 @@
     PS.EnemyMgr.add(e);
     st.arceus = e;
     try { PS.Sprites.preload([493], 4000, true); } catch (er) {}
-    say(name + ' shiny desceu para lutar! Derrote-o!', 4);
+    say('Shiny ' + name + ' has descended to fight! Defeat it!', 4);
     try { PS.Camera.kick(1.6); PS.Audio.sfx('legend'); } catch (er) {}
   }
 
@@ -358,7 +358,7 @@
     if (st.floor === FLOORS) {
       if (st.arceus && st.arceus.dead) {
         st.won = true;
-        say('ARCEUS FOI DERROTADO! A Torre Sem Fim foi conquistada!', 5);
+        say('ARCEUS IS DEFEATED! The Endless Tower has been conquered!', 5);
         try { PS.Audio.sfx('legend'); } catch (e) {}
       } else if (!st.arceus || (!st.arceus.dead && PS.EnemyMgr.all().indexOf(st.arceus) < 0)) {
         spawnArceus(players);              // sumiu (ex.: retomada de partida): volta
@@ -380,7 +380,7 @@
     if (!p) return;
     p.bonds = (p.bonds || 0) + 1;            // o jogo oferece a escolha sozinho no próximo quadro
     try {
-      PS.FX.dmgText(p.x, p.y - p.bodyH - 10, '¡Vínculo!', '#ff8ad8', true);
+      PS.FX.dmgText(p.x, p.y - p.bodyH - 10, 'Bond!', '#ff8ad8', true);
       PS.FX.ring(p.x, p.y, 8, 90, '#ff8ad8', 0.7, 5);
     } catch (e) {}
   }
@@ -410,37 +410,37 @@
   function wr(p) { return p._wr || (p._wr = {}); }
   var WRATH = [
     // --- bênçãos
-    { id: 'vel', buff: true, name: 'Asas do Céu', desc: '+35% de velocidade',
+    { id: 'vel', buff: true, name: 'Wings of Heaven', desc: '+35% speed',
       on: function (p) { wr(p).spd = 1.35; }, off: function (p) { wr(p).spd = 1; } },
-    { id: 'atk', buff: true, name: 'Fúria Divina', desc: '+30% de ataque',
+    { id: 'atk', buff: true, name: 'Divine Fury', desc: '+30% attack',
       on: function (p) { wr(p).atk = 1.30; }, off: function (p) { wr(p).atk = 1; } },
-    { id: 'def', buff: true, name: 'Escudo Celestial', desc: '−25% de dano recebido',
+    { id: 'def', buff: true, name: 'Celestial Shield', desc: '−25% damage taken',
       on: function (p) { wr(p).taken = 0.75; }, off: function (p) { wr(p).taken = 1; } },
-    { id: 'rgn', buff: true, name: 'Mão Curadora', desc: 'regenera 2% da vida por segundo',
+    { id: 'rgn', buff: true, name: 'Healing Hand', desc: 'regenerates 2% HP per second',
       on: function (p) { wr(p).rgnPct = 0.02; }, off: function (p) { wr(p).rgnPct = 0; } },
-    { id: 'gold', buff: true, name: 'Chuva Dourada', desc: 'experiência e moedas em dobro',
+    { id: 'gold', buff: true, name: 'Golden Rain', desc: 'double experience and coins',
       // XP pelo getter; moedas: o que for recolhido nestes 60 s conta em dobro (ver wrathTick)
       on: function (p, d) { wr(p).xp = 2; d.coins = p.coins || 0; },
       off: function (p, d) { wr(p).xp = 1; goldTick(p, d); } },
-    { id: 'crit', buff: true, name: 'Olho do Criador', desc: '+25% de chance de crítico',
+    { id: 'crit', buff: true, name: 'Eye of the Creator', desc: '+25% crit chance',
       on: function (p) { p.critChance = (p.critChance || 0) + 0.25; },
       off: function (p) { p.critChance = (p.critChance || 0) - 0.25; } },
-    { id: 'mag', buff: true, name: 'Atração Celestial', desc: 'ímã ×3: puxa tudo de longe',
+    { id: 'mag', buff: true, name: 'Celestial Pull', desc: 'magnet ×3: pulls everything from afar',
       on: function (p) { p.magnet *= 3; }, off: function (p) { p.magnet /= 3; } },
     // --- castigos
-    { id: 'slow', buff: false, name: 'Peso do Pecado', desc: '−30% de velocidade',
+    { id: 'slow', buff: false, name: 'Weight of Sin', desc: '−30% speed',
       on: function (p) { wr(p).spd = 0.70; }, off: function (p) { wr(p).spd = 1; } },
-    { id: 'weak', buff: false, name: 'Braço Trêmulo', desc: '−25% de ataque',
+    { id: 'weak', buff: false, name: 'Trembling Arm', desc: '−25% attack',
       on: function (p) { wr(p).atk = 0.75; }, off: function (p) { wr(p).atk = 1; } },
-    { id: 'glass', buff: false, name: 'Pele de Vidro', desc: '+30% de dano recebido',
+    { id: 'glass', buff: false, name: 'Glass Skin', desc: '+30% damage taken',
       on: function (p) { wr(p).taken = 1.30; }, off: function (p) { wr(p).taken = 1; } },
-    { id: 'tired', buff: false, name: 'Exaustão', desc: 'golpes recarregam 35% mais devagar',
+    { id: 'tired', buff: false, name: 'Exhaustion', desc: 'moves recharge 35% slower',
       on: function (p) { wr(p).cd = 1.35; }, off: function (p) { wr(p).cd = 1; } },
-    { id: 'starve', buff: false, name: 'Jejum Sagrado', desc: 'sem regeneração de vida',
+    { id: 'starve', buff: false, name: 'Sacred Fast', desc: 'no HP regeneration',
       on: function (p) { wr(p).noRegen = true; }, off: function (p) { wr(p).noRegen = false; } },
-    { id: 'nomag', buff: false, name: 'Mãos Vazias', desc: 'ímã −70%: vá buscar os itens',
+    { id: 'nomag', buff: false, name: 'Empty Hands', desc: 'magnet −70%: go fetch the items',
       on: function (p) { p.magnet *= 0.3; }, off: function (p) { p.magnet /= 0.3; } },
-    { id: 'horde', buff: false, name: 'Legião Infernal', desc: '+50% de inimigos nascendo',
+    { id: 'horde', buff: false, name: 'Infernal Legion', desc: '+50% enemy spawns',
       on: function (p, d) { wrathSpawn = 1.5; },
       off: function (p, d) { wrathSpawn = 1; } }
   ];
@@ -481,7 +481,7 @@
     var pool = WRATH.filter(function (w) { return w.id !== lastWrathId; });
     var w = pool[Math.floor(Math.random() * pool.length)];
     lastWrathId = w.id;
-    say('A Ira de Deus (andar ' + f + '): ' + w.name, 4);
+    say('The Wrath of God (floor ' + f + '): ' + w.name, 4);
   }
   function wrathStart(w, f) {
     var p = PS.Game.player;
@@ -498,8 +498,8 @@
     try { wrath.w.off(wrath.p, wrath.d); } catch (e) {}
     var w = wrath.w; wrath = null;
     if (!silent) {
-      notice((w.buff ? 'A bênção acabou: ' : 'O castigo acabou: ') + w.name, w.buff ? 'buff' : 'debuff', true);
-      try { PS.Spawner.say('A Ira de Deus passou: ' + w.name + ' acabou', 2.6, true); PS.Audio.sfx('back'); } catch (e) {}
+      notice((w.buff ? 'The blessing is over: ' : 'The curse is over: ') + w.name, w.buff ? 'buff' : 'debuff', true);
+      try { PS.Spawner.say('The Wrath of God has passed: ' + w.name + ' ended', 2.6, true); PS.Audio.sfx('back'); } catch (e) {}
     }
   }
   function wrathTick(dt) {
@@ -547,7 +547,7 @@
     if (wrathUi) return wrathUi;
     var pop = document.createElement('div'); pop.id = 'wrath-pop'; pop.setAttribute('translate', 'no');
     pop.innerHTML = '<div class="wp-face"><img src="assets/ui/arceus-portrait.png" alt="Arceus"></div>' +
-      '<div><div class="wp-say">Sinta a fúria de Deus!</div><div class="wp-eff"></div><div class="wp-time">por 1 minuto</div></div>';
+      '<div><div class="wp-say">Feel the fury of God!</div><div class="wp-eff"></div><div class="wp-time">for 1 minute</div></div>';
     var badge = document.createElement('div'); badge.id = 'wrath-badge'; badge.setAttribute('translate', 'no');
     var note = document.createElement('div'); note.id = 'wrath-note'; note.setAttribute('translate', 'no');
     document.body.appendChild(pop); document.body.appendChild(badge); document.body.appendChild(note);
@@ -558,7 +558,7 @@
     var u = ensureWrathUi();
     var eff = u.pop.querySelector('.wp-eff');
     eff.className = 'wp-eff ' + (w.buff ? 'buff' : 'debuff');
-    eff.innerHTML = '<b>' + (w.buff ? 'Bênção' : 'Castigo') + '</b>' + w.name + ' <span>· ' + w.desc + '</span>';
+    eff.innerHTML = '<b>' + (w.buff ? 'Blessing' : 'Curse') + '</b>' + w.name + ' <span>· ' + w.desc + '</span>';
     u.pop.classList.add('show');
     clearTimeout(u.popT);
     u.popT = setTimeout(function () { u.pop.classList.remove('show'); }, 3800);   // some logo depois
@@ -590,7 +590,7 @@
     var f = Math.floor(t / 10000), s = 9999 - (t % 10000);
     var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     var time = (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
-    return f >= 101 ? '★ Zerou · ' + time : 'Andar ' + f + ' · ' + time;
+    return f >= 101 ? '★ Cleared · ' + time : 'Floor ' + f + ' · ' + time;
   };
   function trackMembers() {
     try {
@@ -620,7 +620,7 @@
       entry.t = towerT(floor, secs); entry.lv = p.level | 0 || 1; entry.kills = p.kills | 0;
       var boards = R.PERIODS.map(function (x) { return [R.board(pre, x[0], null), x[0]]; });
       R._put(boards, id, entry).then(function (got) {
-        try { R._tag(got, 'Torre Sem Fim'); } catch (e) {}
+        try { R._tag(got, 'Endless Tower'); } catch (e) {}
       }).catch(function (e) { console.warn('[torre ranking]', e); });
     } catch (e) { console.warn('[torre ranking]', e); }
   }
@@ -663,8 +663,8 @@
     d.style.gridColumn = '1/-1';
     var pct = Math.round(Math.min(100, Math.max(1, floor)) / FLOORS * 100);
     d.innerHTML = won
-      ? '<span>Andar alcançado</span><b class="gold">★ 100 / 100 · Arceus derrotado!</b>'
-      : '<span>Andar alcançado</span><b class="gold">' + floor + ' / ' + FLOORS + '</b>' +
+      ? '<span>Floor reached</span><b class="gold">★ 100 / 100 · Arceus defeated!</b>'
+      : '<span>Floor reached</span><b class="gold">' + floor + ' / ' + FLOORS + '</b>' +
         '<i style="display:block;height:6px;margin:6px auto 0;max-width:260px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden">' +
         '<i style="display:block;height:100%;width:' + pct + '%;background:linear-gradient(90deg,#ffd23f,#ff7a1f)"></i></i>';
     // logo depois do bloco de quadros pequenos (Tempo, Nível, Derrotados, Chefes)
@@ -796,7 +796,7 @@
     if (hud) return hud;
     hud = document.createElement('div');
     hud.id = 'tower-hud';
-    hud.innerHTML = '<div class="th-t">TORRE SEM FIM</div><div class="th-f"></div><div class="th-bar"><i></i></div>';
+    hud.innerHTML = '<div class="th-t">ENDLESS TOWER</div><div class="th-f"></div><div class="th-bar"><i></i></div>';
     document.body.appendChild(hud);
     return hud;
   }
@@ -812,9 +812,9 @@
     if (!show) return;
     var host = !(PS.Coop && PS.Coop.active) || PS.Coop.isHost;
     var f = host ? st.floor : lastFloorSeen;
-    var label = 'Andar ' + f + '/' + FLOORS;
+    var label = 'Floor ' + f + '/' + FLOORS;
     if (f === FLOORS) label += ' · ARCEUS';
-    else if (isBossFloor(f)) label += ' · CHEFE';
+    else if (isBossFloor(f)) label += ' · BOSS';
     var fe = h.querySelector('.th-f');
     if (fe.textContent !== label) fe.textContent = label;
     var bar = h.querySelector('.th-bar i'), w = 0;
@@ -898,17 +898,17 @@
         return r;
       };
       S.say = function (text) {
-        var m = /^Andar (\d+)\/100/.exec(text || '');
+        var m = /^Floor (\d+)\/100/.exec(text || '');
         if (m) lastFloorSeen = +m[1];
-        var ira = /^A Ira de Deus \(andar (\d+)\): (.+)$/.exec(text || '');
+        var ira = /^The Wrath of God \(floor (\d+)\): (.+)$/.exec(text || '');
         if (ira && isTower() && !wrathSeen[ira[1]] && WRATH_BY[ira[2]]) {
           wrathSeen[ira[1]] = 1;
           wrathStart(WRATH_BY[ira[2]], +ira[1]);
         }
-        var r = /^Recompensa do andar (\d+): (.*)$/.exec(text || '');
+        var r = /^Floor (\d+) reward: (.*)$/.exec(text || '');
         if (r && isTower() && !rewardsGiven[r[1]]) {
           rewardsGiven[r[1]] = 1;
-          if (r[2].indexOf('Vínculo') >= 0) giveBond();
+          if (r[2].indexOf('Bond') >= 0) giveBond();
           if (r[2].indexOf('item') >= 0) setTimeout(giveItem, 700);
         }
         return sayF.apply(this, arguments);

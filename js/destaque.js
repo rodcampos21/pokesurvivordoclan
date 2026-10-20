@@ -93,7 +93,7 @@
     var name = (PS.DEX_BY[dex] || {}).name || '';
     setTimeout(function () {
       try {
-        PS.Spawner.say(name + (quiet ? ' entrou em destaque' : ' em destaque') + ': +15% nos atributos!', 3.4, true);
+        PS.Spawner.say(name + (quiet ? ' is now featured' : ' is featured') + ': +15% to all stats!', 3.4, true);
         PS.FX.dmgText(p.x, p.y - p.bodyH - 12, '+15%', '#ffd23f', true);
       } catch (e) {}
     }, quiet ? 0 : 900);
@@ -116,7 +116,7 @@
     p.hourBuff = 0; p._hbHp = p._hbDef = p._hbRgn = p._hbCrit = 0;
     var name = (PS.DEX_BY[buffDex(p)] || {}).name || '';
     try {
-      PS.Spawner.say('O destaque de ' + name + ' acabou: bônus removido', 3.4, true);
+      PS.Spawner.say(name + ' is no longer featured: bonus removed', 3.4, true);
       PS.FX.dmgText(p.x, p.y - p.bodyH - 12, '-15%', '#ff8a8a', true);
     } catch (e) {}
   }
@@ -182,8 +182,8 @@
     var el = document.createElement('div');
     el.className = 'dq-board' + (compact ? ' compact' : '');
     el.setAttribute('translate', 'no');
-    el.innerHTML = '<div class="dq-title">★ Pokémon em destaque ★</div>' +
-      '<div class="dq-sub">+15% nos atributos · troca a cada 5 dias</div>' +
+    el.innerHTML = '<div class="dq-title">★ Featured Pokémon ★</div>' +
+      '<div class="dq-sub">+15% to all stats · changes every 5 days</div>' +
       '<div class="dq-list"></div><div class="dq-time"></div>';
     if (before && before.parentNode === host) host.insertBefore(el, before); else host.appendChild(el);
     boards.push({ el: el, hour: -1 });
@@ -216,7 +216,7 @@
     var mine = partnerDex();
     list.querySelectorAll('.dq-mon').forEach(function (c) { c.classList.toggle('mine', +c.dataset.dex === mine); });
     var left = (h + 1) * HOUR - nowFn();
-    b.el.querySelector('.dq-time').textContent = 'Troca em ' + fmt(left);
+    b.el.querySelector('.dq-time').textContent = 'Changes in ' + fmt(left);
   }
 
   function menuBoard() {

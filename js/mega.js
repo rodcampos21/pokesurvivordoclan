@@ -131,7 +131,7 @@
     try {
       PS.Audio.sfx('legend');
       PS.Camera.kick(0.8);
-      PS.Spawner.say(((PS.DEX_BY[p.dex] || {}).name || '') + ' está Mega Evoluindo!', 2.4, true);
+      PS.Spawner.say(((PS.DEX_BY[p.dex] || {}).name || '') + ' is Mega Evolving!', 2.4, true);
     } catch (e) {}
   }
 
@@ -144,7 +144,7 @@
       PS.FX.ring(p.x, p.y, 10, 140, M.color, 0.8, 6);
       PS.FX.burst(p.x, p.y - 30, M.light, 30, 220);
       PS.FX.dmgText(p.x, p.y - p.bodyH - 14, 'MEGA! +50%', M.color, true);
-      PS.Spawner.say(M.name + '! +50% nos atributos por 30 s', 3.2, true);
+      PS.Spawner.say(M.name + '! +50% to all stats for 30 s', 3.2, true);
       PS.Audio.sfx('shinyGet');
     } catch (e) {}
   }
@@ -158,7 +158,7 @@
         st.fx = { t: 1.36, swapped: true, kind: 'out' };   // só o anel final
         try {
           PS.FX.burst(p.x, p.y - 20, (megaOf(p) || MEGAS[6]).light, 18, 160);
-          PS.Spawner.say('A Mega Evolução acabou', 2.2, true);
+          PS.Spawner.say('Mega Evolution has ended', 2.2, true);
         } catch (e) {}
       }
     }
@@ -300,7 +300,7 @@
     btn.id = 'mega-btn';
     btn.type = 'button';
     btn.setAttribute('translate', 'no');
-    btn.title = 'Mega Evolução (F)';
+    btn.title = 'Mega Evolution (F)';
     btn.innerHTML = '<img src="assets/ui/mega-icon.png" alt="Mega"><span class="cd"></span><span class="mk">F</span>';
     btn.addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); activate(); });
     document.body.appendChild(btn);
