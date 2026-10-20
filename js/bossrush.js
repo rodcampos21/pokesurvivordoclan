@@ -313,13 +313,22 @@
     var speed = Math.pow(st.rawDps / (REF_DPS * teamSize()), DPS_EXP);
     return T.target / Math.max(0.35, Math.min(3, speed));
   }
+  function anyMega() {
+    try {
+      return PS.Game.everyone().some(function (p) { return p && ((p.megaK || 1) > 1 || !!p._megaMon); });
+    } catch (e) { return false; }
+  }
   function adapt(dt) {
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e || e.dead) return;
     st.winT2 = (st.winT2 || 0) + dt;
+    if (anyMega()) st.megaWin = true;
     if (st.winT2 < 2) return;
     var raw = st.rawAcc / st.winT2;               // raw team DPS in the last window
     st.rawAcc = 0; st.winT2 = 0;
+    // Mega Evolution (or any window that had one) is a real power spike: the boss does
+    // not adapt to it, so the extra +50% lands in full while it lasts
+    if (st.megaWin) { st.megaWin = anyMega(); return; }
     st.rawDps = st.rawDps ? st.rawDps * 0.5 + raw * 0.5 : raw;
     if (st.rawDps <= 0) return;
     var len = fightLength();
@@ -412,13 +421,31 @@
     if (st.phase === 'prep') {
       var all = [];
       try { all = PS.Game.everyone(); } catch (e) {}
-      var need = coopOn() ? (PS.Coop.members || []).length || all.length : 1;
-      var ready = (localReady() ? 1 : 0);
-      if (coopOn()) for (var u in st.readyFrom) if (st.readyFrom[u] && u !== PS.Coop.me) ready++;
+      var need = 1, ready = localReady() ? 1 : 0;
+      if (coopOn()) {
+        var mem = (PS.Coop.members || []).map(function (m) { return m.uid; });
+        need = Math.max(mem.length, all.length, 1);
+        for (var u in st.readyFrom) if (st.readyFrom[u] && u !== PS.Coop.me) ready++;
+        // every member (not just "enough" messages) has to be ready
+        var missing = mem.some(function (id) { return id !== PS.Coop.me && !st.readyFrom[id]; });
+        if (missing) ready = Math.min(ready, need - 1);
+        st.syncT = (st.syncT || 0) - dt;
+        if (st.syncT <= 0) {
+          st.syncT = 1;
+          try {
+            if (st.arena) PS.Net.broadcast({ k: 'br', t: 'arena', tx: st.arena.tx, ty: st.arena.ty, boss: st.boss });
+            PS.Net.broadcast({ k: 'br', t: 'wait', ready: ready, need: need });
+          } catch (e) {}
+        }
+      }
+      st.readyN = ready; st.needN = need;
       if (ready >= need) startCount();
     } else if (st.phase === 'count') {
       st.countT -= dt;
-      if (st.countT <= 0) { st.phase = 'fight'; spawnBoss(); }
+      if (st.countT <= 0) {
+        st.phase = 'fight'; spawnBoss();
+        if (coopOn()) { try { PS.Net.broadcast({ k: 'br', t: 'fight' }); } catch (e) {} }
+      }
     } else if (st.phase === 'fight') {
       fightTick(dt);
     }
@@ -429,13 +456,19 @@
     if (!msg || msg.k !== 'br' || !PS) return;
     if (msg.t === 'arena') {
       if (isHost()) return;
+      // the host repeats it every second during the prep: apply it only once
+      if (st.setup && st.arena && st.arena.tx === msg.tx && st.arena.ty === msg.ty && st.boss === msg.boss) return;
       st = fresh(); st.setup = true; st.boss = msg.boss || 'groudon'; st.firstClear = !prog().beaten[st.boss];
       st.arena = { tx: msg.tx, ty: msg.ty };
       try { applyArena(msg.tx, msg.ty); } catch (e) { console.error('[bossrush arena]', e); }
     } else if (msg.t === 'ready') {
       if (isHost()) st.readyFrom[msg.u || from] = 1;
+    } else if (msg.t === 'wait') {
+      if (!isHost()) { st.readyN = msg.ready; st.needN = msg.need; }
     } else if (msg.t === 'count') {
-      if (!isHost()) { st.phase = 'count'; st.countT = 10; }
+      if (!isHost() && st.phase === 'prep') { st.phase = 'count'; st.countT = 10; }
+    } else if (msg.t === 'fight') {
+      if (!isHost() && st.phase !== 'fight') { st.phase = 'fight'; st.fightT = 0; }
     } else if (msg.t === 'won') {
       markBeaten(msg.boss || 'groudon');
       if (!isHost()) st.won = true;
@@ -491,18 +524,21 @@
     return ui;
   }
 
+  var lastUi = 0;
   function uiLoop() {
     requestAnimationFrame(uiLoop);
     if (!PS || !PS.Game) return;
-    var u = ensureUi();
+    var u = ensureUi(), now = performance.now();
+    var fdt = Math.min(0.1, (now - (lastUi || now)) / 1000); lastUi = now;
     var on = isBR() && inRun();
     if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; closeItems(); closePoints(); closeMoves(); return; }
     // every client prepares its own Pokémon once the arena is ready
     if (st.setup && !st.granted && (PS.Game.state === 'playing' || PS.Game.state === 'held')) grantPrep();
     if (st.phase === 'prep' && st.granted) {
       var ready = localReady();
-      if (ready && coopOn() && !isHost() && !st.sentReady) {
-        st.sentReady = true;
+      // repeated every 1.5 s until the countdown starts (a lost message no longer blocks)
+      if (ready && coopOn() && !isHost() && now - (st.sentReady || 0) > 1500) {
+        st.sentReady = now;
         try { PS.Net.toHost({ k: 'br', t: 'ready', u: PS.Coop.me }); } catch (e) {}
       }
       var h4 = 'BOSS RUSH · ' + boss().name.toUpperCase(), h4el = u.prep.querySelector('h4');
@@ -510,7 +546,8 @@
       var stepTxt = { points: 'Step 1/3 · Distribute your 50 points', moves: 'Step 2/3 · Pick 4 moves',
         item: 'Step 3/3 · Pick your item', done: 'All set!' }[st.step] || '';
       if (u.step.textContent !== stepTxt) u.step.textContent = stepTxt;
-      var txt = ready ? (coopOn() ? 'Waiting for the team…' : 'The fight is about to begin…') : '';
+      var team = st.needN > 1 ? ' (' + Math.min(st.readyN || 0, st.needN) + '/' + st.needN + ' ready)' : '';
+      var txt = ready ? (coopOn() ? 'Waiting for the team…' + team : 'The fight is about to begin…') : (coopOn() ? team.trim() : '');
       if (st.item && ready) txt = (PS.Icons ? PS.Icons.html(st.item, 20) : '') + ' ' + itemName(st.item) + ' · ' + txt;
       if (u.st.innerHTML !== txt) u.st.innerHTML = txt;
       var anyOpen = (ptsUi && ptsUi.classList.contains('show')) || (movUi && movUi.classList.contains('show')) ||
@@ -518,7 +555,13 @@
       u.btn.style.display = (ready || anyOpen) ? 'none' : '';
       u.prep.style.display = 'block';
     } else u.prep.style.display = 'none';
-    if (st.phase === 'count' && !isHost()) st.countT -= 1 / 60;
+    if (!isHost()) {
+      if (st.phase === 'count') {
+        st.countT -= fdt;
+        // the host's "fight" message got lost: start anyway right after the countdown
+        if (st.countT <= -1.5) { st.phase = 'fight'; st.fightT = 1.5; }
+      } else if (st.phase === 'fight') st.fightT += fdt;
+    }
     if (st.phase === 'count') {
       var n = Math.max(0, Math.ceil(st.countT));
       if (n !== st.countShown) {
