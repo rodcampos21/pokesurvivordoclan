@@ -222,18 +222,27 @@
     return { hp: L('hp'), dmg: L('dmg'), xp: L('xp'), bmin: S[i].bst[0] + (S[i + 1].bst[0] - S[i].bst[0]) * t };
   }
 
+  // Chefes dos andares 5…95: SÓ estes lendários/míticos, sorteados sem repetir na partida.
+  // (Nº da Pokédex; os que o jogo não tem — Zarude, Wo-Chien, Chien-Pao, Ting-Lu,
+  //  Miraidon, Okidogi, Pecharunt — ficam de fora. A força vem do andar, não do Pokémon.)
+  var BOSS_POOL = [
+    144, 145, 146, 150, 151,                                   // Articuno … Mew
+    243, 244, 245, 249, 250, 251,                              // Raikou … Celebi
+    377, 378, 379, 380, 381, 382, 383, 384, 385, 386,          // Regirock … Deoxys
+    480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492,   // Uxie … Shaymin
+    494, 638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649,   // Victini … Genesect
+    716, 717, 718, 719, 720, 721,                              // Xerneas … Volcanion
+    785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 807, 808, 809,  // Tapus … Melmetal
+    888, 889, 890, 891, 892, 894, 895, 896, 897, 898, 905,     // Zacian … Enamorus
+    1004, 1007, 1015, 1016, 1017, 1024                         // Chi-Yu, Koraidon, Munkidori, Fezandipiti, Ogerpon, Terapagos
+  ];
   function pickBossMon(idx) {
-    var lo = 440 + idx * 9, hi = 540 + idx * 12;
-    function ok(d) {
-      return d && d.dex !== 493 && PS.SPRITE_META && PS.SPRITE_META[d.dex] &&
-        PS.Sprites.hasShiny(d.dex) && !st.used[d.dex];
-    }
-    var pool = PS.DEX.filter(function (d) { return ok(d) && d.bst >= lo && d.bst <= hi; });
-    if (!pool.length) pool = PS.DEX.filter(function (d) { return ok(d) && d.bst >= 480; });
-    if (!pool.length) pool = PS.DEX.filter(function (d) { return ok(d); });
-    var m = pool[Math.floor(Math.random() * pool.length)];
-    st.used[m.dex] = 1;
-    return m;
+    function ok(dex) { return PS.DEX_BY[dex] && PS.SPRITE_META && PS.SPRITE_META[dex] && !st.used[dex]; }
+    var pool = BOSS_POOL.filter(ok);
+    if (!pool.length) { st.used = {}; pool = BOSS_POOL.filter(ok); }      // (só se a lista acabasse)
+    var dex = pool[Math.floor(Math.random() * pool.length)];
+    st.used[dex] = 1;
+    return PS.DEX_BY[dex];
   }
 
   function behaviorFor(m) {
