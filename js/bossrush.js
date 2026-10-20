@@ -653,6 +653,17 @@
   function openSel() { renderSel(); sel.classList.add('show'); try { PS.Audio.sfx('click'); } catch (e) {} }
   function closeSel() { if (sel) sel.classList.remove('show'); }
 
+  // Menu banner of map 6: there is no Arceus in this mode, so drop the "Arceus not beaten yet" line
+  setInterval(function () {
+    if (!PS || !PS.Maps || !PS.Maps.selected) return;
+    var cur = null; try { cur = PS.Maps.selected(); } catch (e) {}
+    var facts = document.querySelectorAll('#pp-info .pp-facts span');
+    for (var i = 0; i < facts.length; i++) {
+      var sp = facts[i], isArc = /arceus/i.test(sp.textContent || '');
+      if (isArc) sp.style.display = cur === BR ? 'none' : '';
+    }
+  }, 250);
+
   var bypass = false;
   function startBoss(id) {
     pick = id;
