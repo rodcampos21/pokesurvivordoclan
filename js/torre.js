@@ -581,6 +581,31 @@
     } catch (e) { console.warn('[torre ranking]', e); }
   }
 
+  // ---------------------------------------------------------------- tela de fim
+  // quadro "Andar alcançado" na tela de morte/vitória da torre
+  function overFloor(floor, won) {
+    var box = document.getElementById('over-stats');
+    if (!box) return;
+    var old = box.querySelector('.tower-floor'); if (old) old.remove();
+    var d = document.createElement('div');
+    d.className = 'tower-floor';
+    d.setAttribute('translate', 'no');
+    d.style.gridColumn = '1/-1';
+    var pct = Math.round(Math.min(100, Math.max(1, floor)) / FLOORS * 100);
+    d.innerHTML = won
+      ? '<span>Andar alcançado</span><b class="gold">★ 100 / 100 · Arceus derrotado!</b>'
+      : '<span>Andar alcançado</span><b class="gold">' + floor + ' / ' + FLOORS + '</b>' +
+        '<i style="display:block;height:6px;margin:6px auto 0;max-width:260px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden">' +
+        '<i style="display:block;height:100%;width:' + pct + '%;background:linear-gradient(90deg,#ffd23f,#ff7a1f)"></i></i>';
+    // logo depois do bloco de quadros pequenos (Tempo, Nível, Derrotados, Chefes)
+    var kids = Array.prototype.slice.call(box.children);
+    function wide(el) { return /1\s*\/\s*-1/.test(el.getAttribute('style') || '') || el.style.gridColumn.indexOf('-1') >= 0; }
+    var i = 0;
+    while (i < kids.length && wide(kids[i])) i++;
+    while (i < kids.length && !wide(kids[i])) i++;
+    box.insertBefore(d, kids[i] || null);
+  }
+
   // ---------------------------------------------------------------- chão do castelo
   // Desenhado logo depois do chão do jogo e antes dos líquidos/personagens:
   // lajotas em fileiras desencontradas e tochas nas paredes viradas para o salão.
@@ -845,7 +870,14 @@
     });
     hookModule(ns, 'RunUI', function (U) {
       var so = U.showOver;
-      U.showOver = function () { try { submitTower(); } catch (e) {} return so.apply(this, arguments); };
+      U.showOver = function () {
+        try { submitTower(); } catch (e) {}
+        var tw = isTower(), host = !(PS.Coop && PS.Coop.active) || PS.Coop.isHost;
+        var floor = host ? st.floor : lastFloorSeen, won = st.won;
+        var r = so.apply(this, arguments);
+        if (tw) { try { overFloor(floor, won); } catch (e) { console.error('[torre fim]', e); } }
+        return r;
+      };
     });
     hookModule(ns, 'Game', function (G) {
       var sv = G.saveRun;
