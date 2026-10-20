@@ -760,6 +760,42 @@
       var gx = pr.gainXp;
       pr.gainXp = function () { if (isBR()) return 0; return gx.apply(this, arguments); };
     });
+    // End screen: the game always talks about Arceus; in the Boss Rush use the real boss
+    hookAfter(ns, 'RunUI', function (U) {
+      if (!U || U.__br || typeof U.showOver !== 'function') return;
+      U.__br = true;
+      var so = U.showOver;
+      U.showOver = function (info) {
+        var br = isBR(), B = boss(), e = st.e;
+        var hpLeft = e && !e.dead && e.maxHp ? Math.max(1, Math.round(100 * e.hp / e.maxHp)) : 0;
+        var r = so.apply(this, arguments);
+        var fix = function () {
+          try {
+            var title = document.getElementById('over-title'), stats = document.getElementById('over-stats');
+            if (stats) stats.querySelectorAll('div').forEach(function (d) {
+              // breakdown line under "PokéCoins earned": a key the game never translated
+              if (d.children.length === 0 && /recogidas/.test(d.textContent)) d.textContent = d.textContent.replace(/recogidas/g, 'pickups');
+              if (br && d.children.length === 0 && /\barceus\b/i.test(d.textContent)) d.textContent = d.textContent.replace(/\barceus\b/ig, 'boss reward');
+            });
+            if (!br || !title) return;
+            if (info && info.win) {
+              title.setAttribute('translate', 'no');
+              title.textContent = 'Victory over ' + B.name + '!';
+              var first = stats && stats.querySelector('div > span');
+              if (first) { first.setAttribute('translate', 'no'); first.textContent = B.name + ' defeated'; }
+            } else if (stats && st.phase === 'fight' && hpLeft && !stats.querySelector('.br-left')) {
+              var d = document.createElement('div');
+              d.className = 'br-left';
+              d.style.gridColumn = '1/-1'; d.setAttribute('translate', 'no');
+              d.innerHTML = '<span>' + B.name + '</span><b class="gold">' + hpLeft + '% HP left</b>';
+              stats.insertBefore(d, stats.firstChild);
+            }
+          } catch (er) { console.error('[bossrush over]', er); }
+        };
+        fix(); setTimeout(fix, 0);
+        return r;
+      };
+    });
     hookAfter(ns, 'Net', function (N) { if (N && N.on && !N.__br) { N.__br = true; N.on(onNet); } });
     requestAnimationFrame(uiLoop);
     window.__bossrush = { state: function () { return st; }, BOSSES: BOSSES, TUNE: TUNE, open: openSel,
