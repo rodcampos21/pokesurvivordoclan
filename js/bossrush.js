@@ -157,21 +157,23 @@
     if (me) { PS.Camera.x = me.x; PS.Camera.y = me.y; }
   }
 
-  // +100 levels and 3 bonds (each player on their own game)
+  // +100 levels and 12 bonds (4 moves together × 4 slots = 3 bonds per slot), each player on their own game
+  var PREP_LEVELS = 100, PREP_BONDS = 12;
   function grantPrep() {
     if (st.granted) return;
     var G = PS.Game, p = G.player;
     if (!p || typeof G.__grantLevels !== 'function') return;
     st.granted = true;
-    G.__grantLevels(100);
-    p.bonds = (p.bonds || 0) + 3;
+    G.__grantLevels(PREP_LEVELS);
+    p.bonds = (p.bonds || 0) + PREP_BONDS;
+    st.maxLevel = p.level;
     p.hp = p.maxHp;
-    say('Boss Rush: +100 levels and 3 bonds! Get ready.', 4);
+    say('Boss Rush: +100 levels and 12 bonds! Then pick your item.', 4);
   }
 
   function localReady() {
     var G = PS.Game, p = G.player;
-    if (!p || !st.granted) return false;
+    if (!p || !st.granted || !st.item) return false;
     if (st.ready) return true;
     if ((G.__pending || 0) > 0) return false;
     if (G.state !== 'playing' && G.state !== 'held') return false;
@@ -182,6 +184,29 @@
     if (!st.okSince) st.okSince = now;
     return now - st.okSince > 1500;
   }
+
+
+  function bondPending() {
+    var p = PS.Game.player;
+    return !!(p && (p.bonds || 0) > 0 && !p.bondLater && p.bondOptions && p.bondOptions());
+  }
+  function anyWindow() {
+    return ['scr-levelup', 'scr-bond', 'scr-item', 'scr-moves', 'evo-ui', 'br-items'].some(function (id) {
+      var el = document.getElementById(id);
+      return el && (el.classList.contains('show') || (!el.classList.contains('hidden') && id !== 'br-items')) &&
+        getComputedStyle(el).display !== 'none';
+    });
+  }
+  // the game asks this after each card: in the Boss Rush prep, stop the chain when a bond is possible
+  window.__brNoChain = function () { return isBR() && st.phase === 'prep' && bondPending(); };
+  // Shift / "close" on the card window: the player wants to stop for now
+  document.addEventListener('keydown', function (e) {
+    if (PS && PS.Game && isBR() && PS.Game.state === 'levelup' && (e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) st.userClosed = true;
+  }, true);
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('#scr-levelup button');
+    if (b && PS && isBR() && /close|cerrar/i.test(b.textContent || '')) st.userClosed = true;
+  }, true);
 
   function say(t, d) { try { PS.Spawner.say(t, d || 3, true); } catch (e) {} }
 
@@ -336,7 +361,20 @@
       '#br-prep p{margin:2px 0;font-size:13px;color:#ffe2c8}' +
       '#br-prep .br-st{margin:6px 0 8px;font-size:14px;color:#fff}' +
       '#br-prep .br-st b{color:#ffd23f}' +
-      '#br-prep button{pointer-events:auto}' +
+      '#br-prep button{pointer-events:auto;margin:0 3px}' +
+      '#br-prep .br-it{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;font-size:13px;color:#ffe2c8}' +
+      '#br-items{position:fixed;inset:0;z-index:72;display:none;align-items:center;justify-content:center;padding:14px;background:rgba(4,6,16,.78)}' +
+      '#br-items.show{display:flex}' +
+      '#br-items .bri{width:min(860px,100%);max-height:100%;overflow:auto;padding:14px 16px 16px;border-radius:16px;box-sizing:border-box;' +
+      'background:linear-gradient(180deg,#3a140c,#1a0806);border:2px solid #ff7a3c;box-shadow:0 0 24px rgba(255,90,40,.45);color:#fff;text-align:center}' +
+      '#br-items h3{margin:0 0 2px;color:#ffcf6a;letter-spacing:.05em}' +
+      '#br-items .sub{margin:0 0 10px;font-size:13px;color:#ffd9bf}' +
+      '#br-items .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;text-align:left}' +
+      '#br-items .it{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:2px solid rgba(255,160,90,.35);' +
+      'background:rgba(0,0,0,.28);color:#fff;font:inherit;cursor:pointer;text-align:left}' +
+      '#br-items .it:hover,#br-items .it.on{border-color:#ffd23f;background:rgba(255,210,63,.12)}' +
+      '#br-items .it .ic{flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center}' +
+      '#br-items .it b{display:block;font-size:14px}#br-items .it small{display:block;font-size:12px;color:#e6d2c4;line-height:1.25}' +
       '#br-count{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;pointer-events:none;flex-direction:column}' +
       '#br-count .n{font-weight:900;font-size:min(26vh,180px);line-height:1;color:#ffd23f;text-shadow:0 6px 0 #6a1a00,0 0 40px rgba(255,120,30,.9);' +
       'animation:brPop .9s ease-out}' +
@@ -350,17 +388,23 @@
     css();
     var prep = document.createElement('div'); prep.id = 'br-prep'; prep.setAttribute('translate', 'no');
     prep.innerHTML = '<h4>BOSS RUSH · PRIMAL GROUDON</h4>' +
-      '<p>Spend your <b>100 level-ups</b> (★ box or Shift) and your <b>3 bonds</b>.</p>' +
+      '<p>Spend your <b>100 level-ups</b> (★ box or Shift), your <b>12 bonds</b> and pick <b>1 item</b>.</p>' +
       '<div class="br-st"></div>' +
-      '<button class="btn gold small" type="button">Ready!</button>';
+      '<div class="br-it"></div><br>' +
+      '<button class="btn small" type="button" data-br="item">Choose item</button>' +
+      '<button class="btn gold small" type="button" data-br="ready">Ready!</button>';
     var count = document.createElement('div'); count.id = 'br-count'; count.setAttribute('translate', 'no');
     count.innerHTML = '<div class="n"></div><div class="s">GET READY</div>';
     document.body.appendChild(prep); document.body.appendChild(count);
-    prep.querySelector('button').onclick = function () {
+    prep.querySelector('[data-br="ready"]').onclick = function () {
+      if (!st.item) { openItems(true); return; }
       st.ready = true;
       try { PS.Audio.sfx('confirm'); } catch (e) {}
     };
-    ui = { prep: prep, count: count, st: prep.querySelector('.br-st'), btn: prep.querySelector('button'), n: count.querySelector('.n'), s: count.querySelector('.s') };
+    prep.querySelector('[data-br="item"]').onclick = function () { openItems(false); };
+    ui = { prep: prep, count: count, st: prep.querySelector('.br-st'), it: prep.querySelector('.br-it'),
+      btn: prep.querySelector('[data-br="ready"]'), ibtn: prep.querySelector('[data-br="item"]'),
+      n: count.querySelector('.n'), s: count.querySelector('.s') };
     return ui;
   }
 
@@ -369,19 +413,19 @@
     if (!PS || !PS.Game) return;
     var u = ensureUi();
     var on = isBR() && inRun();
-    if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; return; }
+    if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; closeItems(); return; }
     // every client gets its own +100 levels and 3 bonds once the arena is ready
     if (st.setup && !st.granted && (PS.Game.state === 'playing' || PS.Game.state === 'held')) grantPrep();
-    // solo: open the level-up cards once (they chain by themselves after each pick;
-    // if you close them with Shift they stay closed until you open them again)
-    if (st.phase === 'prep' && st.granted && !coopOn() && !st.ready && !st.autoOpened &&
-        PS.Game.state === 'playing' && (PS.Game.__pending || 0) > 0) {
+    // solo: the level-up cards keep coming until the 100 are spent. Between two cards,
+    // if there is something to bond, the bond window comes first (so all 12 bonds can
+    // be used while new moves are still being learned). Closing the cards with Shift
+    // keeps them closed until you open them again.
+    if (st.phase === 'prep' && st.granted && !coopOn() && !st.ready && !st.userClosed &&
+        PS.Game.state === 'playing' && (PS.Game.__pending || 0) > 0 && !bondPending() && !anyWindow()) {
       var now = performance.now();
-      if (now - (st.lastOpen || 0) > 600) {
-        st.lastOpen = now;
-        try { if (PS.Game.__openLevelUp()) st.autoOpened = true; } catch (e) {}
-      }
+      if (now - (st.lastOpen || 0) > 400) { st.lastOpen = now; try { PS.Game.__openLevelUp(); } catch (e) {} }
     }
+    if (PS.Game.state === 'levelup') st.userClosed = false;
     if (st.phase === 'prep' && st.granted) {
       var G = PS.Game, p = G.player, left = G.__pending || 0, bonds = (p && p.bonds) || 0;
       var ready = localReady();
@@ -390,6 +434,13 @@
         try { PS.Net.toHost({ k: 'br', t: 'ready', u: PS.Coop.me }); } catch (e) {}
       }
       var txt = 'Level-ups left: <b>' + left + '</b> · Bonds left: <b>' + bonds + '</b>';
+      var itTxt = st.item ? (PS.Icons ? PS.Icons.html(st.item, 22) : '') + ' Item: <b>' + itemName(st.item) + '</b>' : 'Item: <b>none yet</b>';
+      if (u.it.innerHTML !== itTxt) u.it.innerHTML = itTxt;
+      u.ibtn.textContent = st.item ? 'Change item' : 'Choose item';
+      u.ibtn.style.display = (ready || (G.state !== 'playing' && G.state !== 'held')) ? 'none' : '';
+      // once the cards and bonds are done, the item window opens by itself
+      var bondLeft = bonds > 0 && !p.bondLater && p.bondOptions && p.bondOptions();
+      if (!st.item && !st.itemsAsked && left === 0 && !bondLeft && G.state === 'playing') { st.itemsAsked = true; openItems(false); }
       if (ready) txt = coopOn() ? 'You are ready! Waiting for the team…' : 'Ready! The fight is about to begin…';
       if (u.st.innerHTML !== txt) u.st.innerHTML = txt;
       // Ready! only while no card/bond window is open (the game is paused under it)
@@ -411,6 +462,45 @@
       u.n.textContent = 'FIGHT!'; u.s.textContent = ''; u.count.style.display = 'flex';
     } else u.count.style.display = 'none';
   }
+
+
+  // ------------------------------------------------------------ item picker (one item for the fight)
+  // items whose effect does nothing in a single boss fight are left out
+  var NO_ITEMS = { amuletcoin: 1, shinycharm: 1, luckyegg: 1, lansatberry: 1 };
+  var itemsUi = null;
+  function itemName(id) { var it = PS.Items && PS.Items.BY[id]; return it ? PS.T(it.name) : id; }
+  function openItems(thenReady) {
+    if (!PS || !PS.Items) return;
+    if (!itemsUi) {
+      itemsUi = document.createElement('div'); itemsUi.id = 'br-items'; itemsUi.setAttribute('translate', 'no');
+      itemsUi.innerHTML = '<div class="bri"><h3>CHOOSE YOUR ITEM</h3>' +
+        '<p class="sub">You can hold only one item during the fight.</p><div class="grid"></div>' +
+        '<div style="margin-top:12px"><button class="btn small" type="button" data-br="close">Close</button></div></div>';
+      document.body.appendChild(itemsUi);
+      itemsUi.querySelector('[data-br="close"]').onclick = closeItems;
+    }
+    var grid = itemsUi.querySelector('.grid');
+    grid.innerHTML = '';
+    Object.keys(PS.Items.BY).forEach(function (id) {
+      if (NO_ITEMS[id]) return;
+      var it = PS.Items.BY[id], b = document.createElement('button');
+      b.type = 'button'; b.className = 'it' + (st.item === id ? ' on' : '');
+      b.innerHTML = '<span class="ic">' + (PS.Icons ? PS.Icons.html(id, 32) : '') + '</span><span><b>' +
+        PS.T(it.name) + '</b><small>' + PS.T(it.desc) + '</small></span>';
+      b.onclick = function () {
+        var p = PS.Game.player;
+        if (!p) return;
+        try { p.equip(id); } catch (e) { console.error('[bossrush item]', e); }
+        st.item = id;
+        try { PS.Audio.sfx('confirm'); } catch (e) {}
+        closeItems();
+        if (thenReady) st.ready = true;
+      };
+      grid.appendChild(b);
+    });
+    itemsUi.classList.add('show');
+  }
+  function closeItems() { if (itemsUi) itemsUi.classList.remove('show'); }
 
   // ------------------------------------------------------------ selection screen
   var sel = null;
@@ -571,6 +661,13 @@
     hookAfter(ns, 'Judgment', function (J) {
       if (!J || J.__br) return; J.__br = true;
       var u = J.update; J.update = function () { if (isBR()) return; return u.apply(this, arguments); };
+    });
+    hookAfter(ns, 'Player', function (P) {
+      var pr = P && P.prototype;
+      if (!pr || pr.__brXp) return;
+      pr.__brXp = true;
+      var gx = pr.gainXp;
+      pr.gainXp = function () { if (isBR()) return 0; return gx.apply(this, arguments); };
     });
     hookAfter(ns, 'Net', function (N) { if (N && N.on && !N.__br) { N.__br = true; N.on(onNet); } });
     requestAnimationFrame(uiLoop);
