@@ -928,6 +928,15 @@
     });
 
     hookModule(ns, 'Tiles', function (T) { installHell(T); });
+    // Jigglypuff's song puts the player (and enemies) to sleep for up to 15 s:
+    // in the middle of a tower fight it looked exactly like the game froze.
+    // In the tower nobody falls asleep; Jigglypuff still shows up and drops its item.
+    hookModule(ns, 'Weather', function (Wt) {
+      var bl = Wt.blocks;
+      if (typeof bl !== 'function' || bl.__tower) return;
+      Wt.blocks = function (what) { return (what === 'sleep' && isTower()) ? true : bl.apply(this, arguments); };
+      Wt.blocks.__tower = true;
+    });
     hookModule(ns, 'Player', function (P) { wrapPlayer(P); });
     hookModule(ns, 'Stats', function (Sx) {
       var dps = Sx.dpsTick, rs = Sx.reset;
