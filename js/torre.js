@@ -88,38 +88,43 @@
     var p = PS.Game.player;
     return p ? Math.max(0, (p.kills || 0) - st.kills0) : 0;
   }
-  // Cenário: o INFERNO — 3 variações exclusivas da torre, trocando a cada chefe
-  // derrotado, em loop (andares 1-5 Brasas, 6-10 Cinzas, 11-15 Abismo, 16-20 Brasas…).
+  // Cenário: o CASTELO INFERNAL — interior escuro de um castelo no inferno.
+  // 3 salões exclusivos da torre, trocando a cada chefe derrotado, em loop
+  // (andares 1-5 Salão das Brasas, 6-10 Cripta das Cinzas, 11-15 Trono Carmesim…).
+  // Piso de lajotas e tochas nas paredes são desenhados por cima (ver castleGround).
   var HELL = [
-    { // Brasas Eternas: chão carbonizado, lava viva, mato em chamas
-      name: 'Inferno · Brasas Eternas', liquid: 'lava',
-      floor: ['#2a1414', '#301818', '#251111'], dirt: ['#1b0c0b', '#200e0c', '#170a09'],
-      speck: '#3d1a12', light: '#5a2418', flowers: ['#ff5a1f', '#ffb02e', '#ff2e2e'],
-      wallTop: ['#221a1c', '#2a2022', '#1d1618'], wallLight: '#4a3434', wallEdge: '#050303',
-      wallFace: ['#160e0f', '#120b0c'], wallFaceDark: '#080505',
-      liq: '#ff3d12', liqDeep: '#b3180a', foam: '#ffd36a', shore: '#1c0b08', prop: 'dead',
-      leaf: ['#2a1a16', '#3a221c', '#4a2a20', '#6a3020'], trunk: ['#140c0a', '#22140f'],
-      rock: ['#2e2426', '#433638', '#5c4a4c'], grass: ['#4a1a10', '#7a2410', '#b8401a']
+    { // Salão das Brasas: pedra escura, fossos de lava, brasas no chão
+      name: 'Salão das Brasas', liquid: 'lava',
+      floor: ['#1b1517', '#1f181a', '#181214'], dirt: ['#151012', '#181214', '#120e10'],
+      speck: '#110c0e', light: '#2c2023', flowers: ['#7a1e0e', '#a8380f', '#5a1010'],
+      wallTop: ['#2a2226', '#30272b', '#251e21'], wallLight: '#4a3c42', wallEdge: '#030202',
+      wallFace: ['#171113', '#130e10'], wallFaceDark: '#070505',
+      liq: '#e0400f', liqDeep: '#8a1a08', foam: '#ffb04a', shore: '#0f0909', prop: 'crystal',
+      leaf: ['#221c1f', '#2f272b', '#40363b', '#7a2a1a'], trunk: ['#120d0f', '#1c1517'],
+      rock: ['#2a2326', '#3a3135', '#4e4448'], grass: ['#1e1719', '#271d20', '#3a2422'],
+      castle: { tile: '#0b0809', tileHi: '#2a2124' }
     },
-    { // Vale das Cinzas: cinza e basalto, rios de sangue
-      name: 'Inferno · Vale das Cinzas', liquid: 'lava',
-      floor: ['#2b2729', '#312c2e', '#262224'], dirt: ['#1d1a1c', '#221e20', '#191618'],
-      speck: '#3b3335', light: '#555052', flowers: ['#c2b8b0', '#ff4a3a', '#8a7f78'],
-      wallTop: ['#1f1a1c', '#262022', '#1a1517'], wallLight: '#403a3c', wallEdge: '#040303',
-      wallFace: ['#141112', '#100d0e'], wallFaceDark: '#070505',
-      liq: '#8a0f12', liqDeep: '#520709', foam: '#ff5a4a', shore: '#160c0c', prop: 'dead',
-      leaf: ['#1e1a1a', '#2c2626', '#3c3434', '#4e4444'], trunk: ['#0f0c0c', '#1a1515'],
-      rock: ['#3a3436', '#4f4749', '#6a6062'], grass: ['#3a3032', '#5a4a4a', '#7a1a1a']
+    { // Cripta das Cinzas: pedra cinza-chumbo, canais de sangue
+      name: 'Cripta das Cinzas', liquid: 'lava',
+      floor: ['#1c1b1e', '#201f22', '#18171a'], dirt: ['#161518', '#19181b', '#131215'],
+      speck: '#121114', light: '#2e2c31', flowers: ['#3a3438', '#5a1414', '#2a2628'],
+      wallTop: ['#26252a', '#2c2b30', '#222126'], wallLight: '#44424a', wallEdge: '#020203',
+      wallFace: ['#141317', '#100f13'], wallFaceDark: '#060508',
+      liq: '#6a0a0e', liqDeep: '#3a0406', foam: '#b0302a', shore: '#0d0c0e', prop: 'crystal',
+      leaf: ['#1e1d21', '#2a292e', '#3a383f', '#55535c'], trunk: ['#0e0d10', '#18171b'],
+      rock: ['#28272c', '#38363d', '#4c4a52'], grass: ['#1b1a1d', '#242226', '#2e2b30'],
+      castle: { tile: '#09090b', tileHi: '#2b2a2f' }
     },
-    { // Abismo Carmesim: escuridão, miasma e cristais de sangue
-      name: 'Inferno · Abismo Carmesim', liquid: 'poison',
-      floor: ['#1d1018', '#22131c', '#190d14'], dirt: ['#140a10', '#180c13', '#11080e'],
-      speck: '#2e1624', light: '#4a1e36', flowers: ['#ff3a5a', '#c81e5a', '#ff9ab8'],
-      wallTop: ['#1a0e16', '#20111b', '#160b12'], wallLight: '#3e2234', wallEdge: '#030102',
-      wallFace: ['#10080d', '#0c060a'], wallFaceDark: '#050204',
-      liq: '#7a1a5a', liqDeep: '#4a0c36', foam: '#ff6ad5', shore: '#12070e', prop: 'crystal',
-      leaf: ['#5a0a14', '#8a1020', '#c41e2e', '#ff4a4a'], trunk: ['#1a0a10', '#2a0f18'],
-      rock: ['#2a1a24', '#3e2634', '#563648'], grass: ['#3a0c1a', '#5e1228', '#8a1a3a']
+    { // Trono Carmesim: mármore negro-arroxeado, poços de miasma, cristais de sangue
+      name: 'Trono Carmesim', liquid: 'poison',
+      floor: ['#170c13', '#1b0e16', '#140a10'], dirt: ['#12080e', '#150a10', '#10070c'],
+      speck: '#0e060b', light: '#2c1222', flowers: ['#6a0a1e', '#8a1030', '#4a0816'],
+      wallTop: ['#1f1019', '#25131e', '#1b0e16'], wallLight: '#43243a', wallEdge: '#020001',
+      wallFace: ['#12080e', '#0e060b'], wallFaceDark: '#050204',
+      liq: '#5e1446', liqDeep: '#36082a', foam: '#d0489a', shore: '#0c050a', prop: 'crystal',
+      leaf: ['#3a0610', '#5a0a18', '#8a1424', '#c42234'], trunk: ['#14080e', '#200c16'],
+      rock: ['#22121c', '#321a2a', '#46263a'], grass: ['#1c0a14', '#2a0e1e', '#3e1228'],
+      castle: { tile: '#070306', tileHi: '#2a1424' }
     }
   ];
   var hellIdx = [];             // posições dos 3 infernos na lista de cenários do jogo
@@ -357,6 +362,75 @@
     PS.Game.giveItem(id);                     // equipa, ou pergunta se quer trocar
   }
 
+  // ---------------------------------------------------------------- chão do castelo
+  // Desenhado logo depois do chão do jogo e antes dos líquidos/personagens:
+  // lajotas em fileiras desencontradas e tochas nas paredes viradas para o salão.
+  function hash2(x, y, k) {
+    var h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177 | 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function castleBiome() {
+    if (!isTower() || !hellIdx.length) return null;
+    var i = hellIdx.indexOf(st.biome);
+    return i >= 0 ? HELL[i] : null;
+  }
+  function castleGround(ctx, cam) {
+    var B = castleBiome();
+    if (!B || !B.castle) return;
+    var W = PS.World, TS = W.TS || 32, C = PS.Camera;
+    var x0 = Math.floor(C.left() / TS) - 1, y0 = Math.floor(C.top() / TS) - 1;
+    var x1 = Math.ceil((C.left() + C.w) / TS) + 1, y1 = Math.ceil((C.top() + C.h) / TS) + 2;
+    var t = performance.now() / 1000, torches = [];
+    ctx.save();
+    // lajotas: 2×1 blocos, fileiras desencontradas
+    for (var ty = y0; ty <= y1; ty++) {
+      var off = (ty & 1) ? 1 : 0;
+      for (var tx = x0; tx <= x1; tx++) {
+        var cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
+        if (W.isWall(cx, cy)) {
+          // parede com salão logo abaixo: lugar de tocha
+          if (!W.isWall(cx, cy + TS) && !W.isLiquid(cx, cy + TS) && hash2(tx, ty, 7) < 0.16) torches.push([cx, ty * TS + TS - 6, tx, ty]);
+          continue;
+        }
+        if (W.isLiquid(cx, cy)) continue;
+        var px = tx * TS, py = ty * TS;
+        ctx.fillStyle = B.castle.tile;
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(px, py, TS, 2);                                   // junta horizontal
+        if (((tx + off) & 1) === 0) ctx.fillRect(px, py, 2, TS);       // junta vertical (a cada 2 blocos)
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = B.castle.tileHi;
+        ctx.fillRect(px, py + 2, TS, 1);                               // brilho da borda da lajota
+        if (hash2(tx, ty, 3) < 0.12) {                                 // lajota rachada
+          ctx.globalAlpha = 0.6; ctx.fillStyle = B.castle.tile;
+          var rx = px + 6 + Math.floor(hash2(tx, ty, 4) * 14), ry = py + 8;
+          ctx.fillRect(rx, ry, 2, 6); ctx.fillRect(rx + 2, ry + 6, 2, 6); ctx.fillRect(rx + 4, ry + 12, 2, 5);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    // tochas: suporte de ferro, chama tremulando e luz quente
+    for (var i = 0; i < torches.length; i++) {
+      var tc = torches[i], x = tc[0], y = tc[1], fl = 0.85 + 0.15 * Math.sin(t * 9 + tc[2] * 1.7) + 0.08 * Math.sin(t * 23 + tc[3]);
+      ctx.globalCompositeOperation = 'lighter';
+      var g = ctx.createRadialGradient(x, y - 8, 2, x, y - 8, 120 * fl);
+      g.addColorStop(0, 'rgba(255,150,60,0.42)');
+      g.addColorStop(0.35, 'rgba(220,70,20,0.16)');
+      g.addColorStop(1, 'rgba(120,20,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - 130, y - 140, 260, 260);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#1a1414'; ctx.fillRect(x - 3, y - 6, 6, 10);   // suporte
+      ctx.fillStyle = '#3a3030'; ctx.fillRect(x - 5, y - 8, 10, 3);
+      var fh = 9 + 4 * fl;
+      ctx.fillStyle = '#ff5a14'; ctx.fillRect(x - 4, y - 8 - fh, 8, fh);
+      ctx.fillStyle = '#ffb23a'; ctx.fillRect(x - 2, y - 8 - fh + 3, 4, fh - 3);
+      ctx.fillStyle = '#fff1a8'; ctx.fillRect(x - 1, y - 8 - fh + 6, 2, Math.max(2, fh - 8));
+    }
+    ctx.restore();
+  }
+
   // ---------------------------------------------------------------- clima do inferno
   // vinheta vermelho-escura e brasas subindo pela tela (só na torre, em jogo)
   var hellFx = null, embers = [], hellLast = 0;
@@ -369,7 +443,7 @@
     var st2 = document.createElement('style');
     st2.textContent =
       '#tower-hell{position:fixed;inset:0;z-index:4;pointer-events:none;display:none;' +
-      'background:radial-gradient(ellipse at 50% 55%,rgba(0,0,0,0) 45%,rgba(40,0,0,.45) 78%,rgba(10,0,0,.8) 100%)}' +
+      'background:radial-gradient(ellipse at 50% 55%,rgba(0,0,0,0) 30%,rgba(20,0,0,.55) 68%,rgba(5,0,0,.88) 100%)}' +
       '#tower-hell canvas{position:absolute;inset:0;width:100%;height:100%}' +
       '@media (prefers-reduced-motion:reduce){#tower-hell canvas{display:none}}';
     document.head.appendChild(st2);
@@ -384,7 +458,7 @@
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     var dt = Math.min(0.05, (now - (hellLast || now)) / 1000); hellLast = now;
     var paused = PS.Game.state !== 'playing';
-    while (embers.length < 46) {
+    while (embers.length < 26) {
       embers.push({ x: Math.random() * w, y: h + Math.random() * h * 0.6, v: 25 + Math.random() * 55,
         s: 1 + Math.random() * 2.2, ph: Math.random() * 6.28, a: 0.35 + Math.random() * 0.55 });
     }
@@ -533,6 +607,14 @@
     });
 
     hookModule(ns, 'Tiles', function (T) { installHell(T); });
+    hookModule(ns, 'World', function (W) {
+      var dg = W.drawGround;
+      W.drawGround = function (ctx, cam) {
+        var r = dg.apply(this, arguments);
+        try { castleGround(ctx, cam); } catch (e) { console.error('[torre castelo]', e); }
+        return r;
+      };
+    });
 
     hookModule(ns, 'Rift', function (R) {
       var u = R.update;
