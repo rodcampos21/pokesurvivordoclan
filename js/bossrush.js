@@ -4,7 +4,7 @@
  *  · Menu: 4 bosses from easiest to hardest (Primal Groudon < Primal Kyogre <
  *    Mega Rayquaza < Deoxys Attack). Each one unlocks after the previous one
  *    is beaten. Each has its own closed arena and weather.
- *  · Before the fight: 50 points for Power/Armor/Synthesis/Precision/Reflexes, then 4 moves
+ *  · Before the fight: 50 points for Vigor/Power/Armor/Synthesis/Precision/Reflexes, then 4 moves
  *    from the Pokémon's pool (max level, bonded together), then 1 item. When you're done
  *    (or press Ready), a 10 → 0 countdown starts and the boss appears.
  *  · Each boss uses its in-game boss moves (decided by its types), scaled up:
@@ -88,10 +88,10 @@
   //   armor: minimum damage reduction (rises with the team's damage) · target: fight length (s) ·
   //   farMax: longest time it stays away from you (s)
   var TUNE = {
-    groudon:  { hp: 5000000, dmg: 100, shot: 55,  spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
-    kyogre:   { hp: 6000000, dmg: 138, shot: 80,  spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
-    rayquaza: { hp: 7000000, dmg: 157, shot: 88,  spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
-    deoxys:   { hp: 8000000, dmg: 182, shot: 102, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
+    groudon:  { hp: 5000000, dmg: 150, shot: 80,  spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
+    kyogre:   { hp: 6000000, dmg: 185, shot: 100, spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
+    rayquaza: { hp: 7000000, dmg: 220, shot: 120, spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
+    deoxys:   { hp: 8000000, dmg: 260, shot: 145, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
   };
   function teamHp(n) { return [1, 1, 1.8, 2.5, 3.2][Math.max(1, Math.min(4, n))]; }
   function teamDmg(n) { return 1 + 0.12 * (Math.max(1, Math.min(4, n)) - 1); }
@@ -237,7 +237,7 @@
   //   2) pick 4 moves from the Pokémon's move pool: they come at max level, bonded together
   //   3) pick 1 item → countdown → fight
   var PREP_LEVELS = 50, PICK_MOVES = 4;
-  var PTS_STATS = ['atk', 'def', 'rgn', 'crit', 'cd'];
+  var PTS_STATS = ['hp', 'atk', 'def', 'rgn', 'crit', 'cd'];
   function grantPrep() {
     if (st.granted) return;
     var G = PS.Game, p = G.player;
@@ -301,8 +301,17 @@
   }
 
   // Adaptive defense: the HP bar never jumps. Every 2 s the boss measures the
-  // team's raw damage and sets how much of it actually lands, so the remaining
-  // HP lasts until about `target` seconds — whatever the build or team size.
+  // team's raw damage and sets how much of it actually lands. The fight lasts
+  // about `target` seconds for a reference team; more damage still pays off:
+  // fight length ∝ (reference / team DPS)^0.6 (2× damage ≈ 34% shorter fight,
+  // half the damage ≈ 52% longer), so a damage build is faster but never melts the boss.
+  var REF_DPS = 160000, DPS_EXP = 0.6;     // reference: a balanced level-51 Pokémon
+  function fightLength() {
+    var T = TUNE[st.boss] || TUNE.groudon;
+    if (!st.rawDps) return T.target;
+    var speed = Math.pow(st.rawDps / (REF_DPS * teamSize()), DPS_EXP);
+    return T.target / Math.max(0.35, Math.min(3, speed));
+  }
   function adapt(dt) {
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e || e.dead) return;
@@ -312,11 +321,12 @@
     st.rawAcc = 0; st.winT2 = 0;
     st.rawDps = st.rawDps ? st.rawDps * 0.5 + raw * 0.5 : raw;
     if (st.rawDps <= 0) return;
-    var left = Math.max(20, T.target - st.fightT);
+    var len = fightLength();
+    var left = Math.max(15, len - st.fightT);
     var want = (e.hp / left) / st.rawDps;          // fraction of the damage that should land
     want = Math.max(0.00002, Math.min(1 - T.armor, want));
     // last stretch: the defense only goes down, so the end never drags on
-    if (T.target - st.fightT < 25 && e.brK && want < e.brK) return;
+    if (len - st.fightT < 25 && e.brK && want < e.brK) return;
     e.brK = e.brK ? e.brK * 0.4 + want * 0.6 : want;
   }
 
@@ -495,7 +505,7 @@
 
 
   // ------------------------------------------------------------ step 1: distribute 50 points
-  var STAT_COL = { atk: '#f0a830', def: '#2fd08a', rgn: '#f5b22e', crit: '#9fb2d8', cd: '#ff6fb0' };
+  var STAT_COL = { hp: '#ff5a6a', atk: '#f0a830', def: '#2fd08a', rgn: '#f5b22e', crit: '#9fb2d8', cd: '#ff6fb0' };
   var ptsUi = null, movUi = null;
   function winCss() {
     if (document.getElementById('br-win-css')) return;
