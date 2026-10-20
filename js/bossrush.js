@@ -4,7 +4,8 @@
  *  · Menu: 4 bosses from easiest to hardest (Primal Groudon < Primal Kyogre <
  *    Mega Rayquaza < Deoxys Attack). Each one unlocks after the previous one
  *    is beaten. Each has its own closed arena and weather.
- *  · Before the fight: +100 levels, 12 bonds and 1 item of your choice. When you're done
+ *  · Before the fight: 50 points for Power/Armor/Synthesis/Precision/Reflexes, then 4 moves
+ *    from the Pokémon's pool (max level, bonded together), then 1 item. When you're done
  *    (or press Ready), a 10 → 0 countdown starts and the boss appears.
  *  · Each boss uses its in-game boss moves (decided by its types), scaled up:
  *    more damage, damage reduction, faster casts, a hunting AI and a fury
@@ -87,10 +88,10 @@
   //   armor: minimum damage reduction (rises with the team's damage) · target: fight length (s) ·
   //   farMax: longest time it stays away from you (s)
   var TUNE = {
-    groudon:  { hp: 5000000, dmg: 220, shot: 120, spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
-    kyogre:   { hp: 6000000, dmg: 250, shot: 145, spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
-    rayquaza: { hp: 7000000, dmg: 285, shot: 160, spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
-    deoxys:   { hp: 8000000, dmg: 330, shot: 185, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
+    groudon:  { hp: 5000000, dmg: 100, shot: 55,  spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
+    kyogre:   { hp: 6000000, dmg: 138, shot: 80,  spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
+    rayquaza: { hp: 7000000, dmg: 157, shot: 88,  spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
+    deoxys:   { hp: 8000000, dmg: 182, shot: 102, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
   };
   function teamHp(n) { return [1, 1, 1.8, 2.5, 3.2][Math.max(1, Math.min(4, n))]; }
   function teamDmg(n) { return 1 + 0.12 * (Math.max(1, Math.min(4, n)) - 1); }
@@ -230,56 +231,30 @@
     if (me) { PS.Camera.x = me.x; PS.Camera.y = me.y; }
   }
 
-  // +100 levels and 12 bonds (4 moves together × 4 slots = 3 bonds per slot), each player on their own game
-  var PREP_LEVELS = 100, PREP_BONDS = 12;
+  // Boss Rush prep, in 3 steps (each player on their own game):
+  //   1) 50 level points to distribute among Power, Armor, Synthesis, Precision and Reflexes
+  //      (the same effects and caps as the level-up cards)
+  //   2) pick 4 moves from the Pokémon's move pool: they come at max level, bonded together
+  //   3) pick 1 item → countdown → fight
+  var PREP_LEVELS = 50, PICK_MOVES = 4;
+  var PTS_STATS = ['atk', 'def', 'rgn', 'crit', 'cd'];
   function grantPrep() {
     if (st.granted) return;
     var G = PS.Game, p = G.player;
-    if (!p || typeof G.__grantLevels !== 'function') return;
+    if (!p) return;
     st.granted = true;
-    G.__grantLevels(PREP_LEVELS);
-    p.bonds = (p.bonds || 0) + PREP_BONDS;
-    st.maxLevel = p.level;
+    p.level += PREP_LEVELS;               // no level-up cards: the points are spent in the window below
+    try { p.levelHp(PREP_LEVELS); } catch (e) {}
+    p.xp = 0;
+    try { p.xpNext = PS.Player.xpFor(p.level); } catch (e) {}
+    p.bonds = 0;
     p.hp = p.maxHp;
-    say('Boss Rush: +100 levels and 12 bonds! Then pick your item.', 4);
+    st.step = 'points'; st.alloc = {}; PTS_STATS.forEach(function (k) { st.alloc[k] = 0; });
+    say('Boss Rush: distribute 50 points, pick 4 moves and 1 item!', 4);
+    openPoints();
   }
 
-  function localReady() {
-    var G = PS.Game, p = G.player;
-    if (!p || !st.granted || !st.item) return false;
-    if (st.ready) return true;
-    if ((G.__pending || 0) > 0) return false;
-    if (G.state !== 'playing' && G.state !== 'held') return false;
-    var bondLeft = (p.bonds || 0) > 0 && !p.bondLater && p.bondOptions && p.bondOptions();
-    if (bondLeft) { st.okSince = 0; return false; }
-    // the bond window opens a moment after the last card: wait until things settle
-    var now = performance.now();
-    if (!st.okSince) st.okSince = now;
-    return now - st.okSince > 1500;
-  }
-
-
-  function bondPending() {
-    var p = PS.Game.player;
-    return !!(p && (p.bonds || 0) > 0 && !p.bondLater && p.bondOptions && p.bondOptions());
-  }
-  function anyWindow() {
-    return ['scr-levelup', 'scr-bond', 'scr-item', 'scr-moves', 'evo-ui', 'br-items'].some(function (id) {
-      var el = document.getElementById(id);
-      return el && (el.classList.contains('show') || (!el.classList.contains('hidden') && id !== 'br-items')) &&
-        getComputedStyle(el).display !== 'none';
-    });
-  }
-  // the game asks this after each card: in the Boss Rush prep, stop the chain when a bond is possible
-  window.__brNoChain = function () { return isBR() && st.phase === 'prep' && bondPending(); };
-  // Shift / "close" on the card window: the player wants to stop for now
-  document.addEventListener('keydown', function (e) {
-    if (PS && PS.Game && isBR() && PS.Game.state === 'levelup' && (e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) st.userClosed = true;
-  }, true);
-  document.addEventListener('click', function (e) {
-    var b = e.target && e.target.closest && e.target.closest('#scr-levelup button');
-    if (b && PS && isBR() && /close|cerrar/i.test(b.textContent || '')) st.userClosed = true;
-  }, true);
+  function localReady() { return !!(st.granted && st.step === 'done'); }
 
   function say(t, d) { try { PS.Spawner.say(t, d || 3, true); } catch (e) {} }
 
@@ -463,24 +438,14 @@
     if (ui) return ui;
     css();
     var prep = document.createElement('div'); prep.id = 'br-prep'; prep.setAttribute('translate', 'no');
-    prep.innerHTML = '<h4>BOSS RUSH</h4>' +
-      '<p>Spend your <b>100 level-ups</b> (★ box or Shift), your <b>12 bonds</b> and pick <b>1 item</b>.</p>' +
-      '<div class="br-st"></div>' +
-      '<div class="br-it"></div><br>' +
-      '<button class="btn small" type="button" data-br="item">Choose item</button>' +
-      '<button class="btn gold small" type="button" data-br="ready">Ready!</button>';
+    prep.innerHTML = '<h4>BOSS RUSH</h4><p class="br-step"></p><div class="br-st"></div>' +
+      '<button class="btn gold small" type="button" data-br="open">Open</button>';
     var count = document.createElement('div'); count.id = 'br-count'; count.setAttribute('translate', 'no');
     count.innerHTML = '<div class="n"></div><div class="s">GET READY</div>';
     document.body.appendChild(prep); document.body.appendChild(count);
-    prep.querySelector('[data-br="ready"]').onclick = function () {
-      if (!st.item) { openItems(true); return; }
-      st.ready = true;
-      try { PS.Audio.sfx('confirm'); } catch (e) {}
-    };
-    prep.querySelector('[data-br="item"]').onclick = function () { openItems(false); };
-    ui = { prep: prep, count: count, st: prep.querySelector('.br-st'), it: prep.querySelector('.br-it'),
-      btn: prep.querySelector('[data-br="ready"]'), ibtn: prep.querySelector('[data-br="item"]'),
-      n: count.querySelector('.n'), s: count.querySelector('.s') };
+    prep.querySelector('[data-br="open"]').onclick = function () { openStep(); };
+    ui = { prep: prep, count: count, step: prep.querySelector('.br-step'), st: prep.querySelector('.br-st'),
+      btn: prep.querySelector('[data-br="open"]'), n: count.querySelector('.n'), s: count.querySelector('.s') };
     return ui;
   }
 
@@ -489,21 +454,10 @@
     if (!PS || !PS.Game) return;
     var u = ensureUi();
     var on = isBR() && inRun();
-    if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; closeItems(); return; }
-    // every client gets its own +100 levels and 3 bonds once the arena is ready
+    if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; closeItems(); closePoints(); closeMoves(); return; }
+    // every client prepares its own Pokémon once the arena is ready
     if (st.setup && !st.granted && (PS.Game.state === 'playing' || PS.Game.state === 'held')) grantPrep();
-    // solo: the level-up cards keep coming until the 100 are spent. Between two cards,
-    // if there is something to bond, the bond window comes first (so all 12 bonds can
-    // be used while new moves are still being learned). Closing the cards with Shift
-    // keeps them closed until you open them again.
-    if (st.phase === 'prep' && st.granted && !coopOn() && !st.ready && !st.userClosed &&
-        PS.Game.state === 'playing' && (PS.Game.__pending || 0) > 0 && !bondPending() && !anyWindow()) {
-      var now = performance.now();
-      if (now - (st.lastOpen || 0) > 400) { st.lastOpen = now; try { PS.Game.__openLevelUp(); } catch (e) {} }
-    }
-    if (PS.Game.state === 'levelup') st.userClosed = false;
     if (st.phase === 'prep' && st.granted) {
-      var G = PS.Game, p = G.player, left = G.__pending || 0, bonds = (p && p.bonds) || 0;
       var ready = localReady();
       if (ready && coopOn() && !isHost() && !st.sentReady) {
         st.sentReady = true;
@@ -511,18 +465,15 @@
       }
       var h4 = 'BOSS RUSH · ' + boss().name.toUpperCase(), h4el = u.prep.querySelector('h4');
       if (h4el.textContent !== h4) h4el.textContent = h4;
-      var txt = 'Level-ups left: <b>' + left + '</b> · Bonds left: <b>' + bonds + '</b>';
-      var itTxt = st.item ? (PS.Icons ? PS.Icons.html(st.item, 22) : '') + ' Item: <b>' + itemName(st.item) + '</b>' : 'Item: <b>none yet</b>';
-      if (u.it.innerHTML !== itTxt) u.it.innerHTML = itTxt;
-      u.ibtn.textContent = st.item ? 'Change item' : 'Choose item';
-      u.ibtn.style.display = (ready || (G.state !== 'playing' && G.state !== 'held')) ? 'none' : '';
-      // once the cards and bonds are done, the item window opens by itself
-      var bondLeft = bonds > 0 && !p.bondLater && p.bondOptions && p.bondOptions();
-      if (!st.item && !st.itemsAsked && left === 0 && !bondLeft && G.state === 'playing') { st.itemsAsked = true; openItems(false); }
-      if (ready) txt = coopOn() ? 'You are ready! Waiting for the team…' : 'Ready! The fight is about to begin…';
+      var stepTxt = { points: 'Step 1/3 · Distribute your 50 points', moves: 'Step 2/3 · Pick 4 moves',
+        item: 'Step 3/3 · Pick your item', done: 'All set!' }[st.step] || '';
+      if (u.step.textContent !== stepTxt) u.step.textContent = stepTxt;
+      var txt = ready ? (coopOn() ? 'Waiting for the team…' : 'The fight is about to begin…') : '';
+      if (st.item && ready) txt = (PS.Icons ? PS.Icons.html(st.item, 20) : '') + ' ' + itemName(st.item) + ' · ' + txt;
       if (u.st.innerHTML !== txt) u.st.innerHTML = txt;
-      // Ready! only while no card/bond window is open (the game is paused under it)
-      u.btn.style.display = (ready || (G.state !== 'playing' && G.state !== 'held')) ? 'none' : '';
+      var anyOpen = (ptsUi && ptsUi.classList.contains('show')) || (movUi && movUi.classList.contains('show')) ||
+        (itemsUi && itemsUi.classList.contains('show'));
+      u.btn.style.display = (ready || anyOpen) ? 'none' : '';
       u.prep.style.display = 'block';
     } else u.prep.style.display = 'none';
     if (st.phase === 'count' && !isHost()) st.countT -= 1 / 60;
@@ -542,20 +493,202 @@
   }
 
 
+
+  // ------------------------------------------------------------ step 1: distribute 50 points
+  var STAT_COL = { atk: '#f0a830', def: '#2fd08a', rgn: '#f5b22e', crit: '#9fb2d8', cd: '#ff6fb0' };
+  var ptsUi = null, movUi = null;
+  function winCss() {
+    if (document.getElementById('br-win-css')) return;
+    var s = document.createElement('style'); s.id = 'br-win-css';
+    s.textContent =
+      '.br-win{position:fixed;inset:0;z-index:72;display:none;align-items:center;justify-content:center;padding:14px;background:rgba(4,6,16,.78)}' +
+      '.br-win.show{display:flex}' +
+      '.br-win .bw{width:min(680px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:18px 18px 16px;border-radius:16px;color:#fff;' +
+      'background:linear-gradient(180deg,#1a2a5c,#14204a);border:2px solid #3e5aa8;box-shadow:0 10px 40px rgba(0,0,0,.5)}' +
+      '.br-win .bw-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid rgba(160,190,255,.15)}' +
+      '.br-win .bw-h small{display:block;font-size:12px;font-weight:800;letter-spacing:.06em;color:#8fb4ff}' +
+      '.br-win .bw-h h3{margin:2px 0 0;font-size:clamp(22px,3.4vw,30px);font-weight:900}' +
+      '.br-win .bw-left{flex:none;display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;border:2px solid #9fd0ff;' +
+      'background:#13204a;box-shadow:0 0 16px rgba(120,190,255,.45);font-size:12px;font-weight:800;color:#bfe0ff}' +
+      '.br-win .bw-left b{font-size:24px;color:#ffd23f;font-family:monospace}' +
+      '.br-win .row{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:10px;border-radius:12px;background:rgba(40,60,130,.35);border:2px solid #34509a}' +
+      '.br-win .row .ic{flex:none;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;border:2px solid var(--c);background:rgba(0,0,0,.25)}' +
+      '.br-win .row .tx{flex:1;min-width:0}' +
+      '.br-win .row .tx b{font-size:17px}.br-win .row .tx .tag{margin-left:6px;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:900;background:#25418a;color:#bcd2ff;border:1px solid #4a6ac0;vertical-align:2px}' +
+      '.br-win .row .tx small{display:block;margin-top:2px;font-size:12px;color:#c8d6f2}' +
+      '.br-win .row .tx .cap{color:#ffd23f;font-weight:800}' +
+      '.br-win .ctl{flex:none;display:flex;align-items:center;gap:6px}' +
+      '.br-win .ctl button{min-width:32px;height:32px;padding:0 6px;border-radius:8px;border:2px solid #6a8ae0;background:#2c4a9a;color:#fff;font:inherit;font-weight:900;font-size:13px;cursor:pointer}' +
+      '.br-win .ctl button:disabled{opacity:.35;cursor:default;border-color:#3a4a7a;background:#22305e}' +
+      '.br-win .ctl .val{width:44px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#0b1430;border:2px solid #2a3c74;font-weight:900;font-size:16px}' +
+      '.br-win .bw-f{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px;padding:12px 14px;border-radius:12px;background:rgba(10,16,40,.6);border:1px solid #2a3c74;font-size:13px}' +
+      '.br-win .bw-f i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2fd08a;margin-right:6px}' +
+      '.br-win .bw-go{display:flex;justify-content:center;margin-top:14px}' +
+      '.br-win .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}' +
+      '.br-win .mv{display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:10px;border:2px solid #34509a;background:rgba(40,60,130,.35);color:#fff;font:inherit;text-align:left;cursor:pointer}' +
+      '.br-win .mv.on{border-color:#ffd23f;background:rgba(255,210,63,.14);box-shadow:0 0 12px rgba(255,210,63,.3)}' +
+      '.br-win .mv .ic{flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center}' +
+      '.br-win .mv b{display:block;font-size:14px}.br-win .mv small{display:block;font-size:11px;color:#c8d6f2;line-height:1.25}' +
+      '.br-win .mv .lv{margin-left:auto;flex:none;font-size:11px;font-weight:900;color:#ffd23f}' +
+      '@media (max-width:560px){.br-win .row{flex-wrap:wrap}.br-win .ctl{width:100%;justify-content:flex-end}}';
+    document.head.appendChild(s);
+  }
+  function statDef(id) { var L = (PS.LevelUp && PS.LevelUp.STATS) || []; for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i]; return null; }
+  function ptsUsed() { var n = 0; for (var k in st.alloc) n += st.alloc[k]; return n; }
+  // try the allocation on a copy of the Pokémon to know which stats reached their cap
+  function simulate() {
+    var p = PS.Game.player, c = Object.assign(Object.create(Object.getPrototypeOf(p)), p), capped = {};
+    PTS_STATS.forEach(function (k) {
+      var S = statDef(k); if (!S) return;
+      for (var i = 0; i < st.alloc[k]; i++) { if (S.capped && S.capped(c)) break; S.apply(c); }
+      capped[k] = !!(S.capped && S.capped(c));
+    });
+    return capped;
+  }
+  function openPoints() {
+    winCss();
+    if (!ptsUi) {
+      ptsUi = document.createElement('div'); ptsUi.className = 'br-win'; ptsUi.id = 'br-points'; ptsUi.setAttribute('translate', 'no');
+      ptsUi.innerHTML = '<div class="bw"><div class="bw-h"><div><small>UPGRADE MENU</small><h3>Distribute Points</h3></div>' +
+        '<div class="bw-left">POINTS LEFT <b></b></div></div><div class="rows"></div>' +
+        '<div class="bw-f"><span><i></i>Stat Cap: Flexible</span><span class="tot"></span></div>' +
+        '<div class="bw-go"><button class="btn gold" type="button" data-br="ok">Confirm</button></div></div>';
+      document.body.appendChild(ptsUi);
+      ptsUi.querySelector('[data-br="ok"]').onclick = confirmPoints;
+    }
+    var rows = ptsUi.querySelector('.rows'); rows.innerHTML = '';
+    PTS_STATS.forEach(function (k) {
+      var S = statDef(k); if (!S) return;
+      var r = document.createElement('div'); r.className = 'row'; r.dataset.k = k; r.style.setProperty('--c', STAT_COL[k]);
+      r.innerHTML = '<div class="ic">' + (PS.Icons ? PS.Icons.html(S.icon, 28) : '') + '</div>' +
+        '<div class="tx"><b>' + PS.T(S.title) + '</b><span class="tag">UPGRADE</span><small>' + PS.T(S.desc) +
+        ' <span class="cap"></span></small></div>' +
+        '<div class="ctl"><button type="button" data-d="-5">-5</button><button type="button" data-d="-1">-</button>' +
+        '<div class="val"></div><button type="button" data-d="1">+</button><button type="button" data-d="5">+5</button></div>';
+      r.querySelectorAll('button').forEach(function (b) {
+        b.onclick = function () { addPts(k, +b.dataset.d); };
+      });
+      rows.appendChild(r);
+    });
+    renderPoints();
+    ptsUi.classList.add('show');
+  }
+  function addPts(k, d) {
+    for (var i = 0; i < Math.abs(d); i++) {
+      if (d < 0) { if (st.alloc[k] <= 0) break; st.alloc[k]--; continue; }
+      if (ptsUsed() >= PREP_LEVELS || simulate()[k]) break;
+      st.alloc[k]++;
+    }
+    try { PS.Audio.sfx('click'); } catch (e) {}
+    renderPoints();
+  }
+  function renderPoints() {
+    var left = PREP_LEVELS - ptsUsed(), capped = simulate(), allCapped = true;
+    ptsUi.querySelector('.bw-left b').textContent = left;
+    ptsUi.querySelector('.tot').innerHTML = 'Total Invested: <b>' + ptsUsed() + '</b> / ' + PREP_LEVELS;
+    ptsUi.querySelectorAll('.row').forEach(function (r) {
+      var k = r.dataset.k, n = st.alloc[k];
+      if (!capped[k]) allCapped = false;
+      r.querySelector('.val').textContent = n;
+      r.querySelector('.cap').textContent = capped[k] ? '· MAX' : '';
+      r.querySelector('[data-d="-5"]').disabled = r.querySelector('[data-d="-1"]').disabled = n <= 0;
+      r.querySelector('[data-d="1"]').disabled = r.querySelector('[data-d="5"]').disabled = left <= 0 || capped[k];
+    });
+    ptsUi.querySelector('[data-br="ok"]').disabled = left > 0 && !allCapped;
+  }
+  function confirmPoints() {
+    var p = PS.Game.player;
+    if (!p) return;
+    PTS_STATS.forEach(function (k) {
+      var S = statDef(k); if (!S) return;
+      for (var i = 0; i < st.alloc[k]; i++) { if (S.capped && S.capped(p)) break; S.apply(p); }
+    });
+    try { PS.Audio.sfx('confirm'); } catch (e) {}
+    closePoints();
+    st.step = 'moves';
+    openMoves();
+  }
+  function closePoints() { if (ptsUi) ptsUi.classList.remove('show'); }
+
+  // ------------------------------------------------------------ step 2: 4 moves at max level, bonded
+  function poolOf(p) {
+    var ids = [];
+    try { ids = PS.Moves.poolFor(p.mon) || []; } catch (e) {}
+    var seen = {};
+    return ids.filter(function (id) { if (seen[id] || !PS.Moves.BY_ID[id]) return false; seen[id] = 1; return true; });
+  }
+  function openMoves() {
+    winCss();
+    var p = PS.Game.player; if (!p) return;
+    if (!movUi) {
+      movUi = document.createElement('div'); movUi.className = 'br-win'; movUi.id = 'br-moves'; movUi.setAttribute('translate', 'no');
+      movUi.innerHTML = '<div class="bw"><div class="bw-h"><div><small>MOVE SELECTION</small><h3>Pick 4 Moves</h3></div>' +
+        '<div class="bw-left">PICKED <b></b></div></div>' +
+        '<p style="margin:-4px 0 12px;font-size:13px;color:#c8d6f2">They start at max level and bonded together: all 4 fire at the same time.</p>' +
+        '<div class="mgrid"></div><div class="bw-go"><button class="btn gold" type="button" data-br="ok">Confirm</button></div></div>';
+      document.body.appendChild(movUi);
+      movUi.querySelector('[data-br="ok"]').onclick = confirmMoves;
+    }
+    st.pickMoves = st.pickMoves || [];
+    var grid = movUi.querySelector('.mgrid'); grid.innerHTML = '';
+    poolOf(p).forEach(function (id) {
+      var m = PS.Moves.BY_ID[id], b = document.createElement('button');
+      b.type = 'button'; b.className = 'mv'; b.dataset.id = id;
+      b.innerHTML = '<span class="ic">' + (PS.Icons ? PS.Icons.html('move:' + id, 32) : '') + '</span><span><b>' + PS.T(m.name) + '</b>' +
+        '<small>' + PS.T(m.desc || '') + '</small></span><span class="lv">Lv.' + (m.maxLvl || 1) + '</span>';
+      b.onclick = function () {
+        var i = st.pickMoves.indexOf(id);
+        if (i >= 0) st.pickMoves.splice(i, 1);
+        else if (st.pickMoves.length < PICK_MOVES) st.pickMoves.push(id);
+        try { PS.Audio.sfx('click'); } catch (e) {}
+        renderMoves();
+      };
+      grid.appendChild(b);
+    });
+    renderMoves();
+    movUi.classList.add('show');
+  }
+  function renderMoves() {
+    var need = Math.min(PICK_MOVES, poolOf(PS.Game.player).length);
+    movUi.querySelector('.bw-left b').textContent = st.pickMoves.length + '/' + need;
+    movUi.querySelectorAll('.mv').forEach(function (b) { b.classList.toggle('on', st.pickMoves.indexOf(b.dataset.id) >= 0); });
+    movUi.querySelector('[data-br="ok"]').disabled = st.pickMoves.length < need;
+  }
+  function confirmMoves() {
+    var p = PS.Game.player; if (!p || !st.pickMoves.length) return;
+    var inst = st.pickMoves.map(function (id) { var d = PS.Moves.BY_ID[id]; return PS.Moves.instance(id, d.maxLvl || 1); });
+    try { PS.Projectiles.clearOrbs(p); } catch (e) {}
+    p.moves = inst;
+    p.slots = [inst.slice()];
+    p.active = 0;
+    p.bonds = 0; p.bondLater = false;
+    try { p.bondStale(); } catch (e) {}
+    try { PS.Audio.sfx('legend'); } catch (e) {}
+    closeMoves();
+    st.step = 'item';
+    openItems();
+  }
+  function closeMoves() { if (movUi) movUi.classList.remove('show'); }
+
+  function openStep() {
+    if (st.step === 'points') openPoints();
+    else if (st.step === 'moves') openMoves();
+    else if (st.step === 'item') openItems();
+  }
+
   // ------------------------------------------------------------ item picker (one item for the fight)
   // items whose effect does nothing in a single boss fight are left out
   var NO_ITEMS = { amuletcoin: 1, shinycharm: 1, luckyegg: 1, lansatberry: 1 };
   var itemsUi = null;
   function itemName(id) { var it = PS.Items && PS.Items.BY[id]; return it ? PS.T(it.name) : id; }
-  function openItems(thenReady) {
+  function openItems() {
     if (!PS || !PS.Items) return;
     if (!itemsUi) {
       itemsUi = document.createElement('div'); itemsUi.id = 'br-items'; itemsUi.setAttribute('translate', 'no');
       itemsUi.innerHTML = '<div class="bri"><h3>CHOOSE YOUR ITEM</h3>' +
         '<p class="sub">You can hold only one item during the fight.</p><div class="grid"></div>' +
-        '<div style="margin-top:12px"><button class="btn small" type="button" data-br="close">Close</button></div></div>';
+        '</div>';
       document.body.appendChild(itemsUi);
-      itemsUi.querySelector('[data-br="close"]').onclick = closeItems;
     }
     var grid = itemsUi.querySelector('.grid');
     grid.innerHTML = '';
@@ -572,7 +705,7 @@
         st.item = id;
         try { PS.Audio.sfx('confirm'); } catch (e) {}
         closeItems();
-        if (thenReady) st.ready = true;
+        st.step = 'done';
       };
       grid.appendChild(b);
     });
