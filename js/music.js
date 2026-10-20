@@ -4,6 +4,7 @@
  *   menu.mp3       -> login, menus e demais telas ('village')
  *   exploracao.mp3 -> durante a partida (biomas: 'forest', etc.)
  *   chefe.mp3      -> chefes, fendas/rifts, treino e o Julgamento ('boss', 'rift', 'judgment')
+ *   torre.mp3      -> tema da Torre Sem Fim (fora das lutas contra chefes)
  */
 (function () {
   'use strict';
@@ -11,7 +12,8 @@
   var FILES = {
     menu: 'assets/music/menu.mp3',
     exploracao: 'assets/music/exploracao.mp3',
-    chefe: 'assets/music/chefe.mp3'
+    chefe: 'assets/music/chefe.mp3',
+    torre: 'assets/music/torre.mp3'      // tema padrão da Torre Sem Fim
   };
   var CHEFE = { boss: 1, rift: 1, judgment: 1 };
   var MENU = { village: 1 };
@@ -22,6 +24,7 @@
     if (!nome) return null;
     if (CHEFE[nome]) return 'chefe';
     if (MENU[nome]) return 'menu';
+    try { var M = window.__PS && window.__PS.Maps; if (M && M.cur && M.cur.tower) return 'torre'; } catch (e) {}
     return 'exploracao';
   }
 
