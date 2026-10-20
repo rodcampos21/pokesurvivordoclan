@@ -401,52 +401,75 @@
   // aleatório sobre os jogadores, por 60 s. O anfitrião sorteia e anuncia;
   // cada jogador aplica no próprio Pokémon ao ver o anúncio.
   var WRATH_TIME = 60;
+  // Os efeitos ficam numa camada TEMPORÁRIA (p._wr), lida pelos getters do
+  // Player (atk, spd, cdK, reduction, regen, xpK — ver wrapPlayer). Assim as
+  // cartas de nível, itens, Mega e destaque escolhidos durante a Ira não são
+  // distorcidos, e ao fim tudo volta exatamente ao que era.
+  // Só ímã (campo "magnet", sem mexer no magPerm) e crítico (critChance, sem
+  // mexer no critPerm) ainda usam campos, do mesmo jeito que os itens do jogo.
+  function wr(p) { return p._wr || (p._wr = {}); }
   var WRATH = [
     // --- bênçãos
     { id: 'vel', buff: true, name: 'Asas do Céu', desc: '+35% de velocidade',
-      on: function (p, d) { d.k = 1.35; p.spdMul *= d.k; p.spdPerm *= d.k; },
-      off: function (p, d) { p.spdMul /= d.k; p.spdPerm /= d.k; } },
+      on: function (p) { wr(p).spd = 1.35; }, off: function (p) { wr(p).spd = 1; } },
     { id: 'atk', buff: true, name: 'Fúria Divina', desc: '+30% de ataque',
-      on: function (p, d) { d.k = 1.30; p.atkMul *= d.k; p.atkPerm *= d.k; },
-      off: function (p, d) { p.atkMul /= d.k; p.atkPerm /= d.k; } },
+      on: function (p) { wr(p).atk = 1.30; }, off: function (p) { wr(p).atk = 1; } },
     { id: 'def', buff: true, name: 'Escudo Celestial', desc: '−25% de dano recebido',
-      on: function (p, d) { var a = p.dmgReduce || 0; p.dmgReduce = Math.min(PS.Player.DEF_CAP, a + 0.25); d.v = p.dmgReduce - a; },
-      off: function (p, d) { p.dmgReduce = (p.dmgReduce || 0) - d.v; } },
+      on: function (p) { wr(p).taken = 0.75; }, off: function (p) { wr(p).taken = 1; } },
     { id: 'rgn', buff: true, name: 'Mão Curadora', desc: 'regenera 2% da vida por segundo',
-      on: function (p, d) { d.v = p.maxHp * 0.02; p.regenFlat = (p.regenFlat || 0) + d.v; },
-      off: function (p, d) { p.regenFlat = Math.max(0, (p.regenFlat || 0) - d.v); } },
+      on: function (p) { wr(p).rgnPct = 0.02; }, off: function (p) { wr(p).rgnPct = 0; } },
     { id: 'gold', buff: true, name: 'Chuva Dourada', desc: 'experiência e moedas em dobro',
-      on: function (p, d) { p.xpMul *= 2; p.xpPerm *= 2; p.coinMul *= 2; },
-      off: function (p, d) { p.xpMul /= 2; p.xpPerm /= 2; p.coinMul /= 2; } },
+      // XP pelo getter; moedas: o que for recolhido nestes 60 s conta em dobro (ver wrathTick)
+      on: function (p, d) { wr(p).xp = 2; d.coins = p.coins || 0; },
+      off: function (p, d) { wr(p).xp = 1; goldTick(p, d); } },
     { id: 'crit', buff: true, name: 'Olho do Criador', desc: '+25% de chance de crítico',
-      on: function (p, d) { p.critChance = (p.critChance || 0) + 0.25; p.critPerm = (p.critPerm || 0) + 0.25; },
-      off: function (p, d) { p.critChance = Math.max(0, p.critChance - 0.25); p.critPerm = Math.max(0, p.critPerm - 0.25); } },
+      on: function (p) { p.critChance = (p.critChance || 0) + 0.25; },
+      off: function (p) { p.critChance = (p.critChance || 0) - 0.25; } },
     { id: 'mag', buff: true, name: 'Atração Celestial', desc: 'ímã ×3: puxa tudo de longe',
-      on: function (p, d) { p.magnet *= 3; p.magPerm *= 3; },
-      off: function (p, d) { p.magnet /= 3; p.magPerm /= 3; } },
+      on: function (p) { p.magnet *= 3; }, off: function (p) { p.magnet /= 3; } },
     // --- castigos
     { id: 'slow', buff: false, name: 'Peso do Pecado', desc: '−30% de velocidade',
-      on: function (p, d) { d.k = 0.70; p.spdMul *= d.k; p.spdPerm *= d.k; },
-      off: function (p, d) { p.spdMul /= d.k; p.spdPerm /= d.k; } },
+      on: function (p) { wr(p).spd = 0.70; }, off: function (p) { wr(p).spd = 1; } },
     { id: 'weak', buff: false, name: 'Braço Trêmulo', desc: '−25% de ataque',
-      on: function (p, d) { d.k = 0.75; p.atkMul *= d.k; p.atkPerm *= d.k; },
-      off: function (p, d) { p.atkMul /= d.k; p.atkPerm /= d.k; } },
+      on: function (p) { wr(p).atk = 0.75; }, off: function (p) { wr(p).atk = 1; } },
     { id: 'glass', buff: false, name: 'Pele de Vidro', desc: '+30% de dano recebido',
-      on: function (p, d) { d.v = 0.30; p.dmgReduce = (p.dmgReduce || 0) - d.v; },
-      off: function (p, d) { p.dmgReduce = (p.dmgReduce || 0) + d.v; } },
+      on: function (p) { wr(p).taken = 1.30; }, off: function (p) { wr(p).taken = 1; } },
     { id: 'tired', buff: false, name: 'Exaustão', desc: 'golpes recarregam 35% mais devagar',
-      on: function (p, d) { d.k = 1.35; p.cdMul *= d.k; p.cdPerm *= d.k; },
-      off: function (p, d) { p.cdMul /= d.k; p.cdPerm /= d.k; } },
+      on: function (p) { wr(p).cd = 1.35; }, off: function (p) { wr(p).cd = 1; } },
     { id: 'starve', buff: false, name: 'Jejum Sagrado', desc: 'sem regeneração de vida',
-      on: function (p, d) { d.v = p.regenFlat || 0; p.regenFlat = 0; p.noRegenWrath = 1; },
-      off: function (p, d) { p.regenFlat = (p.regenFlat || 0) + d.v; p.noRegenWrath = 0; } },
+      on: function (p) { wr(p).noRegen = true; }, off: function (p) { wr(p).noRegen = false; } },
     { id: 'nomag', buff: false, name: 'Mãos Vazias', desc: 'ímã −70%: vá buscar os itens',
-      on: function (p, d) { p.magnet *= 0.3; p.magPerm *= 0.3; },
-      off: function (p, d) { p.magnet /= 0.3; p.magPerm /= 0.3; } },
+      on: function (p) { p.magnet *= 0.3; }, off: function (p) { p.magnet /= 0.3; } },
     { id: 'horde', buff: false, name: 'Legião Infernal', desc: '+50% de inimigos nascendo',
       on: function (p, d) { wrathSpawn = 1.5; },
       off: function (p, d) { wrathSpawn = 1; } }
   ];
+  function goldTick(p, d) {
+    if (d.coins == null) return;
+    var now = p.coins || 0, got = now - d.coins;
+    if (got > 0) p.coins = now + got;       // dobra o que entrou desde a última conferida
+    d.coins = p.coins || 0;
+  }
+
+  // camada da Ira nos getters do Player (só o jogador local tem p._wr)
+  function wrapPlayer(P) {
+    var proto = P && P.prototype;
+    if (!proto || proto.__wrathWrapped) return;
+    proto.__wrathWrapped = true;
+    function wrap(name, fn) {
+      var dsc = Object.getOwnPropertyDescriptor(proto, name);
+      if (!dsc || !dsc.get) return;
+      var g = dsc.get;
+      Object.defineProperty(proto, name, { configurable: true, enumerable: dsc.enumerable,
+        get: function () { var v = g.call(this), w = this._wr; return w ? fn.call(this, v, w) : v; } });
+    }
+    wrap('atk', function (v, w) { return v * (w.atk || 1); });
+    wrap('spd', function (v, w) { return v * (w.spd || 1); });
+    wrap('cdK', function (v, w) { return v * (w.cd || 1); });
+    wrap('xpK', function (v, w) { return v * (w.xp || 1); });
+    wrap('reduction', function (v, w) { var t = w.taken || 1; return t === 1 ? v : Math.min(0.95, 1 - (1 - v) * t); });
+    wrap('regen', function (v, w) { return w.noRegen ? 0 : v + (w.rgnPct || 0) * (this.maxHp || 0); });
+  }
   var WRATH_BY = {}; WRATH.forEach(function (w) { WRATH_BY[w.name] = w; });
   var wrath = null;              // { w, t, d, p }
   var wrathSpawn = 1;
@@ -482,8 +505,8 @@
   function wrathTick(dt) {
     if (!wrath) return;
     var p = PS.Game.player;
-    if (!p || p !== wrath.p) { wrath = null; wrathSpawn = 1; return; }
-    if (p.noRegenWrath && p.regenFlat > 0) { wrath.d.v += p.regenFlat; p.regenFlat = 0; }   // jejum: guarda o que ganhar e devolve no fim
+    if (!p || p !== wrath.p) { wrathEnd(true); return; }
+    if (wrath.w.id === 'gold') goldTick(p, wrath.d);
     wrath.t -= dt;
     if (wrath.t <= 0) wrathEnd(false);
   }
@@ -837,6 +860,7 @@
       var update = S.update, reset = S.reset, snap = S.snap, restore = S.restore, sayF = S.say;
       S.reset = function () {
         var r = reset.apply(this, arguments);
+        if (wrath) wrathEnd(true);
         rewardsGiven = {}; wrathSeen = {}; wrath = null; wrathSpawn = 1; lastWrathId = '';
         if (isTower()) {
           st = fresh();
@@ -904,13 +928,16 @@
     });
 
     hookModule(ns, 'Tiles', function (T) { installHell(T); });
+    hookModule(ns, 'Player', function (P) { wrapPlayer(P); });
     hookModule(ns, 'Stats', function (Sx) {
       var dps = Sx.dpsTick, rs = Sx.reset;
       Sx.dpsTick = function (dt) {
         try { if (isTower()) { wrathTick(dt); trackMembers(); } } catch (e) { console.error('[ira]', e); }
         return dps.apply(this, arguments);
       };
-      Sx.reset = function () {
+      Sx.reset = function (pl) {
+        if (wrath) wrathEnd(true);
+        try { if (pl) pl._wr = null; } catch (e) {}
         wrath = null; wrathSpawn = 1; wrathSeen = {}; submitted = false; lastMembers = []; wasHost = false;
         return rs.apply(this, arguments);
       };
