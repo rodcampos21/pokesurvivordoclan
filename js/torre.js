@@ -252,6 +252,24 @@
     return sp > 90 ? 'charger' : 'chase';
   }
 
+  // Chefes da torre (menos o Arceus): +10% de dano e IA que persegue mais.
+  // O jogo alterna o chefe entre "perto" (persegue/golpeia) e "longe" (recua e atira);
+  // aqui ele prefere ficar perto e passa no máximo 1,5 s recuando.
+  var BOSS_DMG = 1.10, HUNT_FAR_MAX = 1.5;
+  function huntMode(e) {
+    try {
+      e.bossInit();
+      e.ai.farLike = 0.1;
+      e.ai.mode = 'close';
+      e.ai.modeT = 8;
+    } catch (er) {}
+  }
+  function huntTick() {
+    var b = st.boss;
+    if (!b || b.dead || !b.ai || !b.towerBoss) return;
+    if (b.ai.mode === 'far' && b.ai.modeT > HUNT_FAR_MAX) b.ai.modeT = HUNT_FAR_MAX;
+  }
+
   function spawnFloorBoss(players) {
     var idx = st.floor / BOSS_EVERY;           // 1..19
     var n = players.length || teamSize();
@@ -270,12 +288,14 @@
     var def = {
       dex: m.dex, name: m.name, hp: Math.round(hp), spd: spd,
       dmg: Math.round(1.2 * s.dmg), xp: Math.round(s.xp),
-      behavior: beh, shotDmg: Math.round(0.55 * s.dmg), shotCd: 1.1, range: 260
+      behavior: beh, shotDmg: Math.round(0.55 * s.dmg * BOSS_DMG), shotCd: 1.1, range: 260
     };
     var p = pickTarget(players), pos = edgePos(p);
     var e = new PS.Enemy(def, pos[0], pos[1], PS.Maps.sc({ hp: 1, dmg: bs.dmg, spd: 1 }), true);
     e.castK = 1 + 0.04 * idx;
     e.towerBoss = true;
+    e.dmg *= BOSS_DMG;                     // +10% de dano (corpo, golpes de área e investidas)
+    huntMode(e);
     e.makeShiny();                         // antes do add: o coop envia o shiny junto
     PS.EnemyMgr.add(e);
     st.boss = e;
@@ -333,6 +353,7 @@
     }
     if (st.announced === 0) { st.announced = 1; enterFloor(st.floor || 1, players); return; }
     st.floorT += dt;
+    huntTick();
 
     if (st.floor === FLOORS) {
       if (st.arceus && st.arceus.dead) {
@@ -579,6 +600,32 @@
         try { R._tag(got, 'Torre Sem Fim'); } catch (e) {}
       }).catch(function (e) { console.warn('[torre ranking]', e); });
     } catch (e) { console.warn('[torre ranking]', e); }
+  }
+
+  // ---------------------------------------------------------------- aura dos chefes
+  // chamas azuis girando sob cada chefe da torre (o Arceus fica sem)
+  var bossAura = new Image(); bossAura.src = 'assets/ui/boss-aura.webp';
+  var AURA_FR = 8, AURA_FPS2 = 10, RING_Y = 0.76;     // altura do anel no quadro (pés do chefe)
+  function bossAuraDrawables() {
+    if (!isTower() || !bossAura.complete || !bossAura.naturalWidth) return [];
+    var out = [], t = performance.now() / 1000;
+    var fw = bossAura.naturalWidth / AURA_FR, fh = bossAura.naturalHeight;
+    PS.EnemyMgr.all().forEach(function (e) {
+      if (!e || e.dead || !e.boss || e.dex === 493 || e.arceus || e.judge) return;
+      out.push({
+        y: e.y - 0.5,                                   // desenhada logo atrás do chefe
+        draw: function (ctx) {
+          var f = Math.floor((t + (e.id || 0) * 0.37) * AURA_FPS2) % AURA_FR;
+          var w = Math.max(120, (e.r || 26) * 4.6), h = w * fh / fw;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.9;
+          ctx.drawImage(bossAura, f * fw, 0, fw, fh, e.x - w / 2, e.y - h * RING_Y, w, h);
+          ctx.restore();
+        }
+      });
+    });
+    return out;
   }
 
   // ---------------------------------------------------------------- tela de fim
@@ -866,6 +913,15 @@
       Sx.reset = function () {
         wrath = null; wrathSpawn = 1; wrathSeen = {}; submitted = false; lastMembers = []; wasHost = false;
         return rs.apply(this, arguments);
+      };
+    });
+    hookModule(ns, 'Training', function (Tr) {
+      var dr = Tr.drawables;
+      Tr.drawables = function () {
+        var list = dr.apply(this, arguments) || [];
+        var a = [];
+        try { a = bossAuraDrawables(); } catch (e) {}
+        return a.length ? list.concat(a) : list;
       };
     });
     hookModule(ns, 'RunUI', function (U) {
