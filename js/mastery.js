@@ -1,10 +1,10 @@
 /* =====================================================================
  * MASTERY — one per Pokémon, earned by the total damage it has dealt
  * ---------------------------------------------------------------------
- *  Rookie 1M · Challenger 2M · Veteran 3M · Gym Leader 5M · Frontier Brain 7M
- *  Elite Four 9M · Champion 12M · Pokémon Master 15M · Legendary 18M · Monarch 20M
+ *  Rookie 5M · Challenger 10M · Veteran 15M · Gym Leader 25M · Frontier Brain 35M
+ *  Elite Four 45M · Champion 60M · Pokémon Master 75M · Legendary 90M · Monarch 100M
  *
- *  · Damage counts in every mode (not in training or with the dev menu on).
+ *  · Damage counts in every mode except the Boss Rush (and not in training or with the dev menu on).
  *  · Reaching a milestone evolves the mastery: only the highest one is used.
  *  · Equip / unequip it in Upgrades; when equipped, the badge floats over
  *    your Pokémon in the run (co-op mates see it too).
@@ -14,16 +14,16 @@
   'use strict';
 
   var TIERS = [
-    { id: 'rookie',     name: 'Rookie',         need: 1e6 },
-    { id: 'challenger', name: 'Challenger',     need: 2e6 },
-    { id: 'veteran',    name: 'Veteran',        need: 3e6 },
-    { id: 'gym',        name: 'Gym Leader',     need: 5e6 },
-    { id: 'frontier',   name: 'Frontier Brain', need: 7e6 },
-    { id: 'elite',      name: 'Elite Four',     need: 9e6 },
-    { id: 'champion',   name: 'Champion',       need: 12e6 },
-    { id: 'master',     name: 'Pokémon Master', need: 15e6 },
-    { id: 'legendary',  name: 'Legendary',      need: 18e6 },
-    { id: 'monarch',    name: 'Monarch',        need: 20e6 }
+    { id: 'rookie',     name: 'Rookie',         need: 5e6 },
+    { id: 'challenger', name: 'Challenger',     need: 10e6 },
+    { id: 'veteran',    name: 'Veteran',        need: 15e6 },
+    { id: 'gym',        name: 'Gym Leader',     need: 25e6 },
+    { id: 'frontier',   name: 'Frontier Brain', need: 35e6 },
+    { id: 'elite',      name: 'Elite Four',     need: 45e6 },
+    { id: 'champion',   name: 'Champion',       need: 60e6 },
+    { id: 'master',     name: 'Pokémon Master', need: 75e6 },
+    { id: 'legendary',  name: 'Legendary',      need: 90e6 },
+    { id: 'monarch',    name: 'Monarch',        need: 100e6 }
   ];
   var LS = 'ps.mastery';
   var BADGE_W = 46;              // badge width over the Pokémon (world px)
@@ -80,6 +80,7 @@
     var G = PS.Game, s = G && G.state;
     if (!(s === 'playing' || s === 'held')) return false;
     if (G.training) return false;
+    if (PS.Maps && PS.Maps.cur && PS.Maps.cur.bossRush) return false;   // the Boss Rush never counts
     if (PS.DevMenu && PS.DevMenu.on) return false;
     return true;
   }
@@ -201,7 +202,7 @@
     if (!force && key === lastKey) return;
     lastKey = key;
     P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp" alt="' + T.name + '">'
-      : '<div class="none">No mastery yet<br>Deal 1M damage<br>to unlock Rookie</div>';
+      : '<div class="none">No mastery yet<br>Deal 5M damage<br>to unlock Rookie</div>';
     P.querySelector('.mp-name').textContent = T ? T.name + (eq ? ' · equipped' : '') : 'Locked';
     var b = P.querySelector('.mp-eq');
     b.style.display = T ? '' : 'none';
