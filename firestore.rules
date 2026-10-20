@@ -138,6 +138,7 @@ service cloud.firestore {
     function isArceusBoard(board) { return board.matches('a[123][sg]_.*'); }
     function isStatBoard(board) { return board.matches('(lv|dp)_.*'); }
     function isTowerBoard(board) { return board.matches('t[sg]_.*'); }
+    function isBossRushBoard(board) { return board.matches('b[gkrd][sg]_.*'); }
     function baseEntry(d) {
       return d.keys().hasOnly(['t', 'uids', 'names', 'dex', 'shiny', 'lv', 'kills', 'at'])
         && d.t is int && d.t > 0
@@ -188,6 +189,22 @@ service cloud.firestore {
         && (resource == null || d.t > resource.data.t);
     }
 
+    // Boss Rush: one board per boss, t = 100000 - seconds of the fight (faster = higher)
+    function validBossRush(board, id) {
+      let d = request.resource.data;
+      let run = get(/databases/$(database)/documents/runs/$(me())).data;
+      let s = 100000 - d.t;
+      return baseEntry(d)
+        && s >= 10 && s <= 3600
+        && s <= (request.time - run.startedAt).seconds() + 30
+        && d.lv <= 101
+        && d.kills <= 100 + s * 12
+        && (board.matches('b[gkrd]s_.*')
+              ? (d.uids.size() == 1 && id == me())
+              : (d.uids.size() >= 2 && d.uids.size() <= 4 && id == d.uids.join('_')))
+        && (resource == null || d.t > resource.data.t);
+    }
+
     function validEntry(board, id) {
       let d = request.resource.data;
       let run = get(/databases/$(database)/documents/runs/$(me())).data;
@@ -212,7 +229,8 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if signedIn() && (isArceusBoard(board) ? validArceus(board, id)
                                              : isStatBoard(board) ? validStat(board, id)
-                                             : isTowerBoard(board) ? validTower(board, id) : validEntry(board, id));
+                                             : isTowerBoard(board) ? validTower(board, id)
+                                             : isBossRushBoard(board) ? validBossRush(board, id) : validEntry(board, id));
       allow delete: if signedIn() && (me() in resource.data.uids || admin());
     }
 

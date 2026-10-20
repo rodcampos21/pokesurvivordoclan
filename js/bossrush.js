@@ -331,6 +331,36 @@
     e.brK = e.brK ? e.brK * 0.4 + want * 0.6 : want;
   }
 
+  // ---------------------------------------------------------------- leaderboard
+  // One board per boss (Solo / Group), fastest kill wins: t = 100000 - seconds.
+  var RANK_ID = { groudon: 'bg', kyogre: 'bk', rayquaza: 'br', deoxys: 'bd' };
+  window.__brFmt = function (t) {
+    var s = Math.max(0, 100000 - t), m = Math.floor(s / 60), sec = s % 60;
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  };
+  function submitRank() {
+    var R = PS.Ranking, me = PS.DB && PS.DB.online && PS.DB.fb, p = PS.Game.player, cat = RANK_ID[st.boss];
+    if (!cat || !R || !R._put || !me || !me.uid || !PS.Social.me || !p || PS.Game.training) return;
+    if (PS.DevMenu && PS.DevMenu.on) return;
+    if (!isHost()) return;                                   // in a group the host sends it
+    var secs = Math.max(10, Math.ceil(st.fightT || 0)), entry, id, pre;
+    var mem = coopOn() ? (PS.Coop.members || []).slice() : [];
+    if (mem.length >= 2) {
+      mem.sort(function (a, b) { return a.uid < b.uid ? -1 : 1; });
+      id = mem.map(function (m) { return m.uid; }).join('_'); pre = cat + 'g';
+      entry = { uids: mem.map(function (m) { return m.uid; }), names: mem.map(function (m) { return m.name; }),
+                dex: mem.map(function (m) { return m.dex; }), shiny: mem.map(function (m) { return !!m.shiny; }) };
+    } else {
+      id = me.uid; pre = cat + 's';
+      entry = { uids: [me.uid], names: [PS.Social.me.name], dex: [p.baseDex || p.dex], shiny: [!!p.shiny] };
+    }
+    entry.t = 100000 - secs; entry.lv = p.level | 0 || 1; entry.kills = p.kills | 0;
+    var boards = R.PERIODS.map(function (x) { return [R.board(pre, x[0], null), x[0]]; });
+    R._put(boards, id, entry).then(function (got) {
+      try { R._tag(got, 'Boss Rush · ' + boss().name); } catch (e) {}
+    }).catch(function (e) { console.warn('[bossrush ranking]', e); });
+  }
+
   function fightTick(dt) {
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e) return;
@@ -341,6 +371,7 @@
       if (!st.won) {
         st.won = true; st.winT = 0;
         markBeaten(st.boss);
+        try { submitRank(); } catch (er) { console.warn('[bossrush ranking]', er); }
         say(boss().name.toUpperCase() + ' IS DEFEATED!', 5);
         try { PS.Audio.sfx('legend'); } catch (er) {}
         if (coopOn()) { try { PS.Net.broadcast({ k: 'br', t: 'won', boss: st.boss }); } catch (er) {} }
