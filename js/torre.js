@@ -170,6 +170,10 @@
       }
     }
 
+    if (f % BOSS_EVERY === 0 && f < FLOORS) {
+      var runId = st;                       // mesmo objeto de estado = mesma partida
+      setTimeout(function () { if (isTower() && st === runId && inRun()) wrathAnnounce(f); }, 2600);
+    }
     if (f === FLOORS) {
       say('Andar 100/100 · O topo da torre…', 4);
       spawnArceus(players);
@@ -362,6 +366,167 @@
     PS.Game.giveItem(id);                     // equipa, ou pergunta se quer trocar
   }
 
+  // ---------------------------------------------------------------- A IRA DE DEUS
+  // A cada 5 andares (5, 10, … 95) Arceus lança uma bênção ou um castigo
+  // aleatório sobre os jogadores, por 60 s. O anfitrião sorteia e anuncia;
+  // cada jogador aplica no próprio Pokémon ao ver o anúncio.
+  var WRATH_TIME = 60;
+  var WRATH = [
+    // --- bênçãos
+    { id: 'vel', buff: true, name: 'Asas do Céu', desc: '+35% de velocidade',
+      on: function (p, d) { d.k = 1.35; p.spdMul *= d.k; p.spdPerm *= d.k; },
+      off: function (p, d) { p.spdMul /= d.k; p.spdPerm /= d.k; } },
+    { id: 'atk', buff: true, name: 'Fúria Divina', desc: '+30% de ataque',
+      on: function (p, d) { d.k = 1.30; p.atkMul *= d.k; p.atkPerm *= d.k; },
+      off: function (p, d) { p.atkMul /= d.k; p.atkPerm /= d.k; } },
+    { id: 'def', buff: true, name: 'Escudo Celestial', desc: '−25% de dano recebido',
+      on: function (p, d) { var a = p.dmgReduce || 0; p.dmgReduce = Math.min(PS.Player.DEF_CAP, a + 0.25); d.v = p.dmgReduce - a; },
+      off: function (p, d) { p.dmgReduce = (p.dmgReduce || 0) - d.v; } },
+    { id: 'rgn', buff: true, name: 'Mão Curadora', desc: 'regenera 2% da vida por segundo',
+      on: function (p, d) { d.v = p.maxHp * 0.02; p.regenFlat = (p.regenFlat || 0) + d.v; },
+      off: function (p, d) { p.regenFlat = Math.max(0, (p.regenFlat || 0) - d.v); } },
+    { id: 'gold', buff: true, name: 'Chuva Dourada', desc: 'experiência e moedas em dobro',
+      on: function (p, d) { p.xpMul *= 2; p.xpPerm *= 2; p.coinMul *= 2; },
+      off: function (p, d) { p.xpMul /= 2; p.xpPerm /= 2; p.coinMul /= 2; } },
+    { id: 'crit', buff: true, name: 'Olho do Criador', desc: '+25% de chance de crítico',
+      on: function (p, d) { p.critChance = (p.critChance || 0) + 0.25; p.critPerm = (p.critPerm || 0) + 0.25; },
+      off: function (p, d) { p.critChance = Math.max(0, p.critChance - 0.25); p.critPerm = Math.max(0, p.critPerm - 0.25); } },
+    { id: 'mag', buff: true, name: 'Atração Celestial', desc: 'ímã ×3: puxa tudo de longe',
+      on: function (p, d) { p.magnet *= 3; p.magPerm *= 3; },
+      off: function (p, d) { p.magnet /= 3; p.magPerm /= 3; } },
+    // --- castigos
+    { id: 'slow', buff: false, name: 'Peso do Pecado', desc: '−30% de velocidade',
+      on: function (p, d) { d.k = 0.70; p.spdMul *= d.k; p.spdPerm *= d.k; },
+      off: function (p, d) { p.spdMul /= d.k; p.spdPerm /= d.k; } },
+    { id: 'weak', buff: false, name: 'Braço Trêmulo', desc: '−25% de ataque',
+      on: function (p, d) { d.k = 0.75; p.atkMul *= d.k; p.atkPerm *= d.k; },
+      off: function (p, d) { p.atkMul /= d.k; p.atkPerm /= d.k; } },
+    { id: 'glass', buff: false, name: 'Pele de Vidro', desc: '+30% de dano recebido',
+      on: function (p, d) { d.v = 0.30; p.dmgReduce = (p.dmgReduce || 0) - d.v; },
+      off: function (p, d) { p.dmgReduce = (p.dmgReduce || 0) + d.v; } },
+    { id: 'tired', buff: false, name: 'Exaustão', desc: 'golpes recarregam 35% mais devagar',
+      on: function (p, d) { d.k = 1.35; p.cdMul *= d.k; p.cdPerm *= d.k; },
+      off: function (p, d) { p.cdMul /= d.k; p.cdPerm /= d.k; } },
+    { id: 'starve', buff: false, name: 'Jejum Sagrado', desc: 'sem regeneração de vida',
+      on: function (p, d) { d.v = p.regenFlat || 0; p.regenFlat = 0; p.noRegenWrath = 1; },
+      off: function (p, d) { p.regenFlat = (p.regenFlat || 0) + d.v; p.noRegenWrath = 0; } },
+    { id: 'nomag', buff: false, name: 'Mãos Vazias', desc: 'ímã −70%: vá buscar os itens',
+      on: function (p, d) { p.magnet *= 0.3; p.magPerm *= 0.3; },
+      off: function (p, d) { p.magnet /= 0.3; p.magPerm /= 0.3; } },
+    { id: 'horde', buff: false, name: 'Legião Infernal', desc: '+50% de inimigos nascendo',
+      on: function (p, d) { wrathSpawn = 1.5; },
+      off: function (p, d) { wrathSpawn = 1; } }
+  ];
+  var WRATH_BY = {}; WRATH.forEach(function (w) { WRATH_BY[w.name] = w; });
+  var wrath = null;              // { w, t, d, p }
+  var wrathSpawn = 1;
+  var wrathSeen = {};            // andar -> já aplicado (evita repetir)
+  var lastWrathId = '';
+
+  function wrathAnnounce(f) {
+  // sorteia (anfitrião/solo) e anuncia; o anúncio aplica em todos (ver S.say)
+    var pool = WRATH.filter(function (w) { return w.id !== lastWrathId; });
+    var w = pool[Math.floor(Math.random() * pool.length)];
+    lastWrathId = w.id;
+    say('A Ira de Deus (andar ' + f + '): ' + w.name, 4);
+  }
+  function wrathStart(w, f) {
+    var p = PS.Game.player;
+    if (!p || p.remote) return;
+    if (wrath) wrathEnd(true);
+    var d = {};
+    try { w.on(p, d); } catch (e) { console.error('[ira]', e); return; }
+    wrath = { w: w, t: WRATH_TIME, d: d, p: p };
+    showWrath(w);
+    try { PS.Audio.sfx(w.buff ? 'legend' : 'boss'); PS.Camera.kick(w.buff ? 0.4 : 1.0); } catch (e) {}
+  }
+  function wrathEnd(silent) {
+    if (!wrath) return;
+    try { wrath.w.off(wrath.p, wrath.d); } catch (e) {}
+    var w = wrath.w; wrath = null;
+    if (!silent) {
+      notice((w.buff ? 'A bênção acabou: ' : 'O castigo acabou: ') + w.name, w.buff ? 'buff' : 'debuff', true);
+      try { PS.Spawner.say('A Ira de Deus passou: ' + w.name + ' acabou', 2.6, true); PS.Audio.sfx('back'); } catch (e) {}
+    }
+  }
+  function wrathTick(dt) {
+    if (!wrath) return;
+    var p = PS.Game.player;
+    if (!p || p !== wrath.p) { wrath = null; wrathSpawn = 1; return; }
+    if (p.noRegenWrath && p.regenFlat > 0) { wrath.d.v += p.regenFlat; p.regenFlat = 0; }   // jejum: guarda o que ganhar e devolve no fim
+    wrath.t -= dt;
+    if (wrath.t <= 0) wrathEnd(false);
+  }
+
+  // ---- retrato do Arceus e avisos
+  var wrathUi = null;
+  function wrathCss() {
+    var st3 = document.createElement('style');
+    st3.textContent =
+      '#wrath-pop{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:30;pointer-events:none;display:flex;' +
+      'align-items:center;gap:14px;padding:12px 18px 12px 12px;border-radius:16px;max-width:min(560px,92vw);' +
+      'background:linear-gradient(135deg,rgba(28,6,6,.94),rgba(10,4,14,.94));border:2px solid #ffcf4a;' +
+      'box-shadow:0 0 0 2px #2a0a0a,0 0 34px rgba(255,140,40,.45);opacity:0;transition:opacity .35s, transform .35s}' +
+      '#wrath-pop.show{opacity:1;transform:translateX(-50%) scale(1)}' +
+      '#wrath-pop .wp-face{flex:none;width:96px;height:96px;border-radius:50%;border:3px solid #ffcf4a;' +
+      'background:radial-gradient(circle at 50% 40%,#3a1208,#120404);overflow:hidden;display:flex;align-items:center;justify-content:center;' +
+      'box-shadow:0 0 18px rgba(255,190,60,.6) inset}' +
+      '#wrath-pop .wp-face img{width:92%;height:92%;object-fit:contain;image-rendering:pixelated}' +
+      '#wrath-pop .wp-say{font:800 20px/1.15 inherit;color:#ffe08a;text-shadow:0 2px 0 #3a0a00,0 0 12px rgba(255,120,30,.7);letter-spacing:.3px}' +
+      '#wrath-pop .wp-eff{margin-top:6px;font:700 15px/1.25 inherit;color:#fff}' +
+      '#wrath-pop .wp-eff b{display:inline-block;padding:2px 8px;border-radius:7px;margin-right:6px}' +
+      '#wrath-pop .wp-eff.buff b{background:#1f8f4d;color:#eafff0}' +
+      '#wrath-pop .wp-eff.debuff b{background:#a3161e;color:#ffecec}' +
+      '#wrath-pop .wp-eff span{color:#e8d9c8}' +
+      '#wrath-pop .wp-time{margin-top:4px;font-size:12px;color:#c9b8a8}' +
+      '#wrath-badge{position:fixed;top:78px;left:12px;z-index:20;pointer-events:none;display:none;padding:5px 10px;border-radius:10px;' +
+      'font:700 13px/1.2 inherit;color:#fff;background:rgba(12,8,16,.82);border:2px solid #ffcf4a;min-width:190px}' +
+      '#wrath-badge.buff{border-color:#3fd27a}#wrath-badge.debuff{border-color:#ff4a4a}' +
+      '#wrath-badge small{display:block;font-weight:600;font-size:11px;color:#cfc3b6}' +
+      '#wrath-note{position:fixed;left:50%;top:38%;transform:translateX(-50%);z-index:30;pointer-events:none;opacity:0;transition:opacity .3s;' +
+      'padding:8px 16px;border-radius:12px;font:700 15px/1.2 inherit;color:#fff;background:rgba(12,8,16,.9);border:2px solid #ffcf4a}' +
+      '#wrath-note.show{opacity:1}#wrath-note.buff{border-color:#3fd27a}#wrath-note.debuff{border-color:#ff4a4a}' +
+      '@media (max-height:520px){#wrath-pop{top:8%;padding:8px 12px 8px 8px}#wrath-pop .wp-face{width:64px;height:64px}' +
+      '#wrath-pop .wp-say{font-size:16px}#wrath-badge{top:50px;left:6px;min-width:150px;font-size:11px}}';
+    document.head.appendChild(st3);
+  }
+  function ensureWrathUi() {
+    if (wrathUi) return wrathUi;
+    var pop = document.createElement('div'); pop.id = 'wrath-pop'; pop.setAttribute('translate', 'no');
+    pop.innerHTML = '<div class="wp-face"><img src="assets/ui/arceus-portrait.png" alt="Arceus"></div>' +
+      '<div><div class="wp-say">Sinta a fúria de Deus!</div><div class="wp-eff"></div><div class="wp-time">por 1 minuto</div></div>';
+    var badge = document.createElement('div'); badge.id = 'wrath-badge'; badge.setAttribute('translate', 'no');
+    var note = document.createElement('div'); note.id = 'wrath-note'; note.setAttribute('translate', 'no');
+    document.body.appendChild(pop); document.body.appendChild(badge); document.body.appendChild(note);
+    wrathUi = { pop: pop, badge: badge, note: note, popT: 0, noteT: 0 };
+    return wrathUi;
+  }
+  function showWrath(w) {
+    var u = ensureWrathUi();
+    var eff = u.pop.querySelector('.wp-eff');
+    eff.className = 'wp-eff ' + (w.buff ? 'buff' : 'debuff');
+    eff.innerHTML = '<b>' + (w.buff ? 'Bênção' : 'Castigo') + '</b>' + w.name + ' <span>· ' + w.desc + '</span>';
+    u.pop.classList.add('show');
+    clearTimeout(u.popT);
+    u.popT = setTimeout(function () { u.pop.classList.remove('show'); }, 3800);   // some logo depois
+  }
+  function notice(text, kind, ended) {
+    var u = ensureWrathUi();
+    u.note.className = kind; u.note.textContent = text;
+    void u.note.offsetWidth; u.note.classList.add('show');
+    clearTimeout(u.noteT);
+    u.noteT = setTimeout(function () { u.note.classList.remove('show'); }, 3000);
+  }
+  function wrathBadge(show) {
+    var u = ensureWrathUi();
+    if (!show || !wrath) { u.badge.style.display = 'none'; return; }
+    var w = wrath.w, t = Math.max(0, Math.ceil(wrath.t));
+    u.badge.style.display = 'block';
+    u.badge.className = w.buff ? 'buff' : 'debuff';
+    var txt = (w.buff ? '✦ ' : '✖ ') + w.name + ' · 0:' + (t < 10 ? '0' : '') + t;
+    if (u.badge.dataset.t !== txt) { u.badge.dataset.t = txt; u.badge.innerHTML = txt + '<small>' + w.desc + '</small>'; }
+  }
+
   // ---------------------------------------------------------------- chão do castelo
   // Desenhado logo depois do chão do jogo e antes dos líquidos/personagens:
   // lajotas em fileiras desencontradas e tochas nas paredes viradas para o salão.
@@ -494,6 +659,7 @@
     var h = ensureHud();
     h.style.display = show ? '' : 'none';
     try { hellLoop(performance.now(), !!show); } catch (e) {}
+    try { wrathBadge(!!show); } catch (e) {}
     if (!show) return;
     var host = !(PS.Coop && PS.Coop.active) || PS.Coop.isHost;
     var f = host ? st.floor : lastFloorSeen;
@@ -545,7 +711,7 @@
       var update = S.update, reset = S.reset, snap = S.snap, restore = S.restore, sayF = S.say;
       S.reset = function () {
         var r = reset.apply(this, arguments);
-        rewardsGiven = {};
+        rewardsGiven = {}; wrathSeen = {}; wrath = null; wrathSpawn = 1; lastWrathId = '';
         if (isTower()) {
           st = fresh();
           st.biome = biomeFor(1);
@@ -561,7 +727,7 @@
           if (S.tickBanner) S.tickBanner(dt);
           return;
         }
-        window.__spawnK = SPAWN_K;
+        window.__spawnK = SPAWN_K * wrathSpawn;
         try { return update.call(this, dt, players, vtime()); }
         finally { window.__spawnK = 1; }
       };
@@ -584,6 +750,11 @@
       S.say = function (text) {
         var m = /^Andar (\d+)\/100/.exec(text || '');
         if (m) lastFloorSeen = +m[1];
+        var ira = /^A Ira de Deus \(andar (\d+)\): (.+)$/.exec(text || '');
+        if (ira && isTower() && !wrathSeen[ira[1]] && WRATH_BY[ira[2]]) {
+          wrathSeen[ira[1]] = 1;
+          wrathStart(WRATH_BY[ira[2]], +ira[1]);
+        }
         var r = /^Recompensa do andar (\d+): (.*)$/.exec(text || '');
         if (r && isTower() && !rewardsGiven[r[1]]) {
           rewardsGiven[r[1]] = 1;
@@ -607,6 +778,19 @@
     });
 
     hookModule(ns, 'Tiles', function (T) { installHell(T); });
+    hookModule(ns, 'Stats', function (Sx) {
+      var dps = Sx.dpsTick, rs = Sx.reset;
+      Sx.dpsTick = function (dt) {
+        try { if (isTower()) wrathTick(dt); } catch (e) { console.error('[ira]', e); }
+        return dps.apply(this, arguments);
+      };
+      Sx.reset = function () { wrath = null; wrathSpawn = 1; wrathSeen = {}; return rs.apply(this, arguments); };
+    });
+    hookModule(ns, 'Game', function (G) {
+      var sv = G.saveRun;
+      if (typeof sv === 'function') G.saveRun = function () { wrathEnd(true); return sv.apply(this, arguments); };
+    });
+    wrathCss();
     hookModule(ns, 'World', function (W) {
       var dg = W.drawGround;
       W.drawGround = function (ctx, cam) {
@@ -626,7 +810,8 @@
     });
 
     requestAnimationFrame(hudLoop);
-    window.__tower = { state: function () { return st; }, map: MAP };
+    window.__tower = { state: function () { return st; }, map: MAP,
+      wrath: function () { return wrath; }, WRATH: WRATH, _announce: wrathAnnounce };
   }
 
   var ns0;
