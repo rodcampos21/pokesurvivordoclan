@@ -26,11 +26,11 @@
     { id: 'monarch',    name: 'Monarch',        need: 100e6 }
   ];
   var LS = 'ps.mastery';
-  var BADGE_W = 46;              // badge width over the Pokémon (world px)
+  var BADGE_W = 46, BADGE_H = 40; // max badge size over the Pokémon (world px)
   var PS = null;
 
   var imgs = {};
-  TIERS.forEach(function (t) { var im = new Image(); im.src = 'assets/ui/mastery/' + t.id + '.webp'; imgs[t.id] = im; });
+  TIERS.forEach(function (t) { var im = new Image(); im.src = 'assets/ui/mastery/' + t.id + '.webp?v=2'; imgs[t.id] = im; });
 
   // ------------------------------------------------------------ data
   function blank() { return { d: {}, eq: {} }; }
@@ -109,6 +109,7 @@
       y: pl.y + 4,
       draw: function (ctx) {
         var w = BADGE_W, h = w * im.naturalHeight / im.naturalWidth;
+        if (h > BADGE_H) { w *= BADGE_H / h; h = BADGE_H; }
         var top = pl.y - (pl.bodyH || 48) - 12 - h;      // just above the HP bar and item counters
         ctx.save();
         ctx.imageSmoothingEnabled = true;
@@ -201,7 +202,7 @@
     var key = dex + '|' + Math.floor(dmg) + '|' + eq;
     if (!force && key === lastKey) return;
     lastKey = key;
-    P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp" alt="' + T.name + '">'
+    P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp?v=2" alt="' + T.name + '">'
       : '<div class="none">No mastery yet<br>Deal 5M damage<br>to unlock Rookie</div>';
     P.querySelector('.mp-name').textContent = T ? T.name + (eq ? ' · equipped' : '') : 'Locked';
     var b = P.querySelector('.mp-eq');
@@ -216,7 +217,7 @@
     P.querySelector('.mp-tiers').innerHTML = TIERS.map(function (t, k) {
       var c = k === i ? 'cur' : k < i ? 'past' : 'lock';
       return '<span class="' + c + '" title="' + t.name + ' · ' + fmt(t.need) + ' damage' + (k < i ? ' (evolved)' : '') + '">' +
-        '<img src="assets/ui/mastery/' + t.id + '.webp" alt=""></span>';
+        '<img src="assets/ui/mastery/' + t.id + '.webp?v=2" alt=""></span>';
     }).join('');
   }
   function uiLoop() {
