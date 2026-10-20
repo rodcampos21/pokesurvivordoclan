@@ -5,6 +5,8 @@
  *  · Transformação: aura de cristais azuis e troca de sprite para o Mega.
  *  · Dura 30 s com +50% em todos os atributos; depois volta ao normal.
  *  · Recarga: 50 s, contados a partir do fim da transformação.
+ *  · Durante a Mega os limites de atributo (ataque, velocidade, recarga,
+ *    defesa, regeneração e HP) sobem na mesma proporção: a Mega passa do teto.
  * ===================================================================== */
 (function () {
   'use strict';
@@ -83,8 +85,47 @@
   }
 
   // ------------------------------------------------------------ atributos (+50%)
+  // ------------------------------------------------------------ limites acima do teto
+  // Enquanto um getter de um jogador em Mega roda, os limites estáticos do
+  // Player ficam multiplicados por megaK (a defesa/recarga na forma 1-(1-x)/k).
+  var capK = 1;
+  function raiseCaps(P) {
+    if (!P || P.__megaCaps) return;
+    P.__megaCaps = true;
+    function st_(name, fn) {
+      var d = Object.getOwnPropertyDescriptor(P, name);
+      if (!d || !d.get) return;
+      var g = d.get;
+      Object.defineProperty(P, name, { configurable: true, get: function () {
+        var v = g.call(this); return capK > 1 ? fn(v, capK) : v; } });
+    }
+    st_('ATK_CAP', function (v, k) { return v * k; });
+    st_('SPD_CAP', function (v, k) { return v * k; });
+    st_('HP_CAP', function (v, k) { return v * k; });
+    st_('REGEN_CAP', function (v, k) { return v * k; });
+    st_('CD_MIN', function (v, k) { return v / k; });
+    st_('DEF_CAP', function (v, k) { return 1 - (1 - v) / k; });
+    st_('DEF_MAX', function (v, k) { return Math.min(0.97, 1 - (1 - v) / k); });
+    var proto = P.prototype;
+    ['atk', 'spd', 'cdK', 'reductionBase', 'reduction', 'regen'].forEach(function (name) {
+      var d = Object.getOwnPropertyDescriptor(proto, name);
+      if (!d || !d.get) return;
+      var g = d.get;
+      Object.defineProperty(proto, name, { configurable: true, enumerable: d.enumerable, get: function () {
+        var k = this.megaK || 1;
+        if (k <= 1) return g.call(this);
+        var o = capK; capK = k;
+        try { return g.call(this); } finally { capK = o; }
+      } });
+    });
+  }
+
   function buff(p) {
-    var k = 1 + BONUS, P = PS.Player;
+    var k = 1 + BONUS, P = PS.Player, o = capK;
+    capK = k;
+    try { buff0(p, k, P); } finally { capK = o; }
+  }
+  function buff0(p, k, P) {
     var hp0 = p.maxHp;
     p.maxHp = Math.min(P.HP_CAP, Math.round(p.maxHp * k));
     p._mgHp = p.maxHp - hp0;
@@ -330,6 +371,7 @@
   function install() {
     Object.keys(MEGAS).forEach(function (d) { PS.SPRITE_META[MEGAS[d].skin] = MEGAS[d].meta; });
     css();
+    try { raiseCaps(PS.Player); } catch (e) { console.error('[mega caps]', e); }
 
     // relógio: Stats.dpsTick roda uma vez por quadro, só com o jogo rodando
     var dps = PS.Stats.dpsTick;

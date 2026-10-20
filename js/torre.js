@@ -294,7 +294,7 @@
     var e = new PS.Enemy(def, pos[0], pos[1], PS.Maps.sc({ hp: 1, dmg: bs.dmg, spd: 1 }), true);
     e.castK = 1 + 0.04 * idx;
     e.towerBoss = true;
-    e.dmg *= BOSS_DMG;                     // +10% de dano (corpo, golpes de área e investidas)
+    if (typeof e._dmg === 'number') e._dmg *= BOSS_DMG; else e.dmg *= BOSS_DMG;                     // +10% de dano (corpo, golpes de área e investidas)
     huntMode(e);
     e.makeShiny();                         // antes do add: o coop envia o shiny junto
     PS.EnemyMgr.add(e);

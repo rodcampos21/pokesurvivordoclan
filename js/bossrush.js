@@ -306,7 +306,10 @@
   // about `target` seconds for a reference team; more damage still pays off:
   // fight length ∝ (reference / team DPS)^0.6 (2× damage ≈ 34% shorter fight,
   // half the damage ≈ 52% longer), so a damage build is faster but never melts the boss.
-  var REF_DPS = 160000, DPS_EXP = 0.6;     // reference: a balanced level-51 Pokémon
+  var REF_DPS = 160000, DPS_EXP = 0.6;
+  // Mega in the Boss Rush: landed damage ∝ raw^MEGA_EXP while it lasts, and the boss
+  // hits MEGA_RAGE harder (Mega armor now goes past the cap)
+  var MEGA_EXP = 0.75, MEGA_RAGE = 1.15;     // reference: a balanced level-51 Pokémon
   function fightLength() {
     var T = TUNE[st.boss] || TUNE.groudon;
     if (!st.rawDps) return T.target;
@@ -322,13 +325,22 @@
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e || e.dead) return;
     st.winT2 = (st.winT2 || 0) + dt;
-    if (anyMega()) st.megaWin = true;
+    var mg = anyMega();
+    if (mg && !st.megaWin) { st.megaWin = true; st.preMegaK = e.brK; }
     if (st.winT2 < 2) return;
     var raw = st.rawAcc / st.winT2;               // raw team DPS in the last window
     st.rawAcc = 0; st.winT2 = 0;
-    // Mega Evolution (or any window that had one) is a real power spike: the boss does
-    // not adapt to it, so the extra +50% lands in full while it lasts
-    if (st.megaWin) { st.megaWin = anyMega(); return; }
+    // Mega Evolution is a real power spike, but it must not trivialize the fight:
+    // the boss keeps its pre-Mega defense and only softens the spike a bit, so the
+    // landed damage grows with (raw boost)^MEGA_EXP (≈ +45% for the usual +65% raw).
+    if (st.megaWin) {
+      if (st.rawDps > 0 && st.preMegaK) {
+        var boost = Math.max(1, raw / st.rawDps);
+        e.brK = st.preMegaK * Math.pow(boost, MEGA_EXP - 1);
+      }
+      if (!mg) { st.megaWin = false; if (st.preMegaK) e.brK = st.preMegaK; st.preMegaK = 0; }
+      return;
+    }
     st.rawDps = st.rawDps ? st.rawDps * 0.5 + raw * 0.5 : raw;
     if (st.rawDps <= 0) return;
     var len = fightLength();
@@ -370,6 +382,8 @@
     }).catch(function (e) { console.warn('[bossrush ranking]', e); });
   }
 
+  // e.dmg is a getter (×0.8 while burned): scale the stored base, not the burned value
+  function scaleDmg(e, k) { if (typeof e._dmg === 'number') e._dmg *= k; else e.dmg *= k; }
   function fightTick(dt) {
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e) return;
@@ -388,13 +402,19 @@
       return;
     }
     if (PS.EnemyMgr.all().indexOf(e) < 0) { PS.EnemyMgr.add(e); }
+    var mgOn = anyMega();
+    if (mgOn !== !!st.megaRage) {
+      st.megaRage = mgOn;
+      if (mgOn) { scaleDmg(e, MEGA_RAGE); e.castK *= 1.08; say(boss().name.toUpperCase() + ' SENSES THE MEGA POWER!', 2.6); }
+      else { scaleDmg(e, 1 / MEGA_RAGE); e.castK /= 1.08; }
+    }
     if (e.ai) {
       if (e.ai.mode === 'far' && e.ai.modeT > T.farMax) e.ai.modeT = T.farMax;
       if (e.ai.cd > 1.4) e.ai.cd = 1.4;
     }
     if (!st.fury && e.hp < 0.5 * e.maxHp) {
       st.fury = true;
-      e.castK *= 1.2; e.spd *= 1.15; e.dmg *= 1.2;
+      e.castK *= 1.2; e.spd *= 1.15; scaleDmg(e, 1.2);
       say(boss().say.fury, 3.4);
       try { PS.Camera.kick(1.2); } catch (er) {}
     }
