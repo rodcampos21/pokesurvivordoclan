@@ -24,6 +24,7 @@
     if (!nome) return null;
     if (CHEFE[nome]) return 'chefe';
     if (MENU[nome]) return 'menu';
+    try { var M0 = window.__PS && window.__PS.Maps; if (M0 && M0.cur && M0.cur.bossRush) return 'chefe'; } catch (e) {}
     try { var M = window.__PS && window.__PS.Maps; if (M && M.cur && M.cur.tower) return 'torre'; } catch (e) {}
     return 'exploracao';
   }
