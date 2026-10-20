@@ -385,9 +385,22 @@
     } catch (e) {}
   }
 
-  function giveItem() {
+  // The item waits until no other choice (bond, level-up, move, evolution) is
+  // open: opening the item window over the bond window used to hide the bond
+  // window and leave the game waiting forever.
+  function choiceBusy() {
+    var s = PS.Game.state;
+    if (s !== 'playing' && s !== 'held') return true;
+    return ['scr-bond', 'scr-item', 'scr-levelup', 'scr-moves', 'evo-ui', 'loot-ui'].some(function (id) {
+      var el = document.getElementById(id);
+      return el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none';
+    });
+  }
+  function giveItem(tries) {
     var p = PS.Game.player;
     if (!p || p.dead || !isTower()) return;
+    tries = tries || 0;
+    if (choiceBusy() && tries < 240) { setTimeout(function () { giveItem(tries + 1); }, 500); return; }
     var id = PS.Items.roll(p.item);           // sorteia um item diferente do que já carrega
     try {
       PS.FX.dmgText(p.x, p.y - p.bodyH - 26, 'Item!', '#9ae6ff', true);
