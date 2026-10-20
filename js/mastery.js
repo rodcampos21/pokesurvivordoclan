@@ -30,7 +30,7 @@
   var PS = null;
 
   var imgs = {};
-  TIERS.forEach(function (t) { var im = new Image(); im.src = 'assets/ui/mastery/' + t.id + '.webp?v=2'; imgs[t.id] = im; });
+  TIERS.forEach(function (t) { var im = new Image(); im.src = 'assets/ui/mastery/' + t.id + '.webp?v=3'; imgs[t.id] = im; });
 
   // ------------------------------------------------------------ data
   function blank() { return { d: {}, eq: {} }; }
@@ -202,7 +202,7 @@
     var key = dex + '|' + Math.floor(dmg) + '|' + eq;
     if (!force && key === lastKey) return;
     lastKey = key;
-    P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp?v=2" alt="' + T.name + '">'
+    P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp?v=3" alt="' + T.name + '">'
       : '<div class="none">No mastery yet<br>Deal 5M damage<br>to unlock Rookie</div>';
     P.querySelector('.mp-name').textContent = T ? T.name + (eq ? ' · equipped' : '') : 'Locked';
     var b = P.querySelector('.mp-eq');
@@ -217,7 +217,7 @@
     P.querySelector('.mp-tiers').innerHTML = TIERS.map(function (t, k) {
       var c = k === i ? 'cur' : k < i ? 'past' : 'lock';
       return '<span class="' + c + '" title="' + t.name + ' · ' + fmt(t.need) + ' damage' + (k < i ? ' (evolved)' : '') + '">' +
-        '<img src="assets/ui/mastery/' + t.id + '.webp?v=2" alt=""></span>';
+        '<img src="assets/ui/mastery/' + t.id + '.webp?v=3" alt=""></span>';
     }).join('');
   }
   function uiLoop() {
