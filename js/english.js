@@ -49,6 +49,28 @@
     dropLanguageRow(host); fixPadButtons(host);
     new MutationObserver(function () { dropLanguageRow(host); fixPadButtons(host); })
       .observe(host, { childList: true, subtree: true });
+    // Contact window (#about-pop): this fork's logo and text
+    new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++)
+        for (var j = 0; j < muts[i].addedNodes.length; j++)
+          if (muts[i].addedNodes[j].id === 'about-pop') rewriteAbout(muts[i].addedNodes[j]);
+    }).observe(document.body, { childList: true });
+  }
+
+  var ABOUT = [
+    'This is the <b>enhanced version by Rod</b> of PokéSurvivor.',
+    'The original game is by <b>JPTER78</b> (<a href="https://github.com/JPTER78/pokesurvivor" target="_blank" rel="noopener">github.com/JPTER78/pokesurvivor</a>). ' +
+      'I took over the work and improved it a lot my own way.',
+    "It's still a free, non-profit fan game."
+  ];
+  function rewriteAbout(pop) {
+    var box = pop.querySelector('.box');
+    if (!box || box.__fork) return;
+    box.__fork = true;
+    var img = box.querySelector('img');
+    if (img) { img.src = 'assets/ui/logo-doclan-menu.webp'; img.alt = 'PokéSurvivor do Clã'; }
+    var ps = box.querySelectorAll(':scope > p');
+    for (var i = 0; i < 3 && i < ps.length; i++) ps[i].innerHTML = ABOUT[i];
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
