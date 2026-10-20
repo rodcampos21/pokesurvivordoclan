@@ -10,6 +10,37 @@
 
   var ENTRIES = [
     {
+      d: '2026-10-21',
+      title: ['Maestría y Boss Rush', 'Mastery & Boss Rush'],
+      top: [
+        ['Nuevo sistema de Maestría: cada Pokémon gana insignias según el daño total que inflige.',
+         'New Mastery system: every Pokémon earns badges based on the total damage it deals.'],
+        ['Nuevo modo Boss Rush: 4 jefes legendarios en arenas cerradas, con preparación propia.',
+         'New Boss Rush mode: 4 legendary bosses in closed arenas, with their own prep phase.']
+      ],
+      'new': [
+        ['§Maestría', '§Mastery'],
+        ['10 rangos por Pokémon: Rookie (5M de daño) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (100M).',
+         '10 ranks per Pokémon: Rookie (5M damage) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (100M).'],
+        ['Al llegar a un hito la maestría evoluciona; equípala en Mejoras y su insignia aparece sobre tu Pokémon (tus aliados también la ven).',
+         'Reaching a milestone evolves your mastery; equip it in Upgrades and its badge floats over your Pokémon (teammates see it too).'],
+        ['La barra de progreso en Mejoras muestra cuánto falta para el siguiente rango. El daño en Boss Rush no cuenta.',
+         'A progress bar in Upgrades shows how far you are from the next rank. Boss Rush damage does not count.'],
+        ['§Boss Rush', '§Boss Rush'],
+        ['Primal Groudon, Primal Kyogre, Mega Rayquaza y Deoxys (Ataque), desbloqueados en orden, cada uno con su arena y clima.',
+         'Primal Groudon, Primal Kyogre, Mega Rayquaza and Deoxys (Attack), unlocked in order, each with its own arena and weather.'],
+        ['Antes de luchar: reparte 50 puntos de atributos, elige 4 movimientos (al máximo y evolucionados) y 1 objeto.',
+         'Before the fight: spend 50 stat points, pick 4 moves (maxed and evolved) and 1 item.'],
+        ['Equilibrado para 1 a 4 jugadores; en grupo la lucha empieza cuando todos están listos.',
+         'Balanced for 1 to 4 players; in co-op the fight starts once everyone is ready.'],
+        ['Ranking propio para cada jefe (solo y en grupo): gana quien lo derrote más rápido.',
+         'Its own leaderboard for each boss (solo and group): the fastest kill wins.'],
+        ['§Otros', '§Other'],
+        ['La Megaevolución ahora supera los límites de atributos mientras dura.',
+         'Mega Evolution now goes past the stat caps while it lasts.']
+      ]
+    },
+    {
       d: '2026-10-20',
       title: ['Megaevolución, Torre Sin Fin y saltar el gacha', 'Mega Evolution, Endless Tower & Gacha Skip'],
       top: [
