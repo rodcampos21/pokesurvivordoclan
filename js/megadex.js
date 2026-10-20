@@ -17,6 +17,12 @@
       types: ['fire', 'dragon'], bonus: 0.5,
       info: 'Durante a partida com Charizard, use o botão da Mega (tecla F): ' +
         '30 s com +50% em todos os atributos · recarga de 50 s.'
+    },
+    {
+      id: 'mega94', base: 94, skin: '94_mega', name: 'Mega Gengar',
+      types: ['ghost', 'poison'], bonus: 0.5,
+      info: 'Durante a partida com Gengar, use o botão da Mega (tecla F): ' +
+        '30 s com +50% em todos os atributos · recarga de 50 s.'
     }
   ];
 
@@ -125,7 +131,7 @@
     }
     box.innerHTML = html;
     var cv = box.querySelector('#dex-big');
-    cv.style.setProperty('--stage-c', have ? '#5fd4ff' : '#5b83d6');
+    cv.style.setProperty('--stage-c', have ? (m.base === 94 ? '#b46bff' : '#5fd4ff') : '#5b83d6');
     try {
       PS.UI.sprite(cv, m.skin, { lively: have, spin: have, silhouette: !have, scale: 3, hero: true });
     } catch (e) {}
@@ -163,7 +169,7 @@
   var wait = setInterval(function () {
     var ns = window.__PS;
     if (ns && ns.UI && ns.UI.spriteCanvas && ns.DB && ns.DEX_BY && ns.Gacha && ns.SPRITE_META &&
-        ns.SPRITE_META['6_megax'] && document.getElementById('dex-gens')) {
+        ns.SPRITE_META['6_megax'] && ns.SPRITE_META['94_mega'] && document.getElementById('dex-gens')) {
       clearInterval(wait);
       PS = ns;
       install();

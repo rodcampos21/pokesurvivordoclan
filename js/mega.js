@@ -1,7 +1,7 @@
 /* =====================================================================
- * MEGA EVOLUÇÃO — Charizard → Mega Charizard X
+ * MEGA EVOLUÇÃO — Charizard → Mega Charizard X · Gengar → Mega Gengar
  * ---------------------------------------------------------------------
- *  · Botão com o símbolo da Mega (ou tecla F) quando o seu Pokémon é Charizard.
+ *  · Botão com o símbolo da Mega (ou tecla F) quando o seu Pokémon tem Mega.
  *  · Transformação: aura de cristais azuis e troca de sprite para o Mega.
  *  · Dura 30 s com +50% em todos os atributos; depois volta ao normal.
  *  · Recarga: 50 s, contados a partir do fim da transformação.
@@ -9,32 +9,57 @@
 (function () {
   'use strict';
 
-  var BASE_DEX = 6;               // Charizard
-  var SKIN = '6_megax';           // pasta assets/pokemon/6_megax/
   var DURATION = 30;              // segundos de Mega
   var COOLDOWN = 50;              // segundos de recarga (após a Mega acabar)
   var BONUS = 0.50;               // +50% em todos os atributos
   var KEY = 'KeyF';
 
-  // Quadros dos sprites do Mega Charizard X (8 direções em cada folha)
-  var META = {
-    s: 2,
-    a: {
-      Idle:   { w: 48, h: 56, n: 4,  r: 8, d: [15, 15, 15, 15], ax: 23.5, ay: 31.5 },
-      Walk:   { w: 48, h: 56, n: 4,  r: 8, d: [8, 10, 8, 10], ax: 23.5, ay: 31.5 },
-      Attack: { w: 88, h: 96, n: 14, r: 8, d: [2, 2, 2, 2, 4, 1, 1, 2, 2, 2, 2, 2, 2, 2], ax: 43.5, ay: 50.5 },
-      Shoot:  { w: 56, h: 64, n: 11, r: 8, d: [4, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 27.5, ay: 34.5 },
-      Charge: { w: 48, h: 56, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 23.5, ay: 31.5 },
-      Hurt:   { w: 64, h: 64, n: 2,  r: 8, d: [2, 8], ax: 31.5, ay: 33.5 },
-      Faint:  { w: 40, h: 40, n: 2,  r: 8, d: [12, 14], ax: 19.5, ay: 25.5 }
+  // Megas disponíveis, pelo número da Pokédex do Pokémon base.
+  // skin = pasta em assets/pokemon/ · hue = giro de cor da aura (0 = azul original)
+  var MEGAS = {
+    6: {
+      name: 'Mega Charizard X', skin: '6_megax', hue: 0, color: '#5fd4ff', light: '#9ae6ff',
+      meta: { s: 2, a: {
+        Idle:   { w: 48, h: 56, n: 4,  r: 8, d: [15, 15, 15, 15], ax: 23.5, ay: 31.5 },
+        Walk:   { w: 48, h: 56, n: 4,  r: 8, d: [8, 10, 8, 10], ax: 23.5, ay: 31.5 },
+        Attack: { w: 88, h: 96, n: 14, r: 8, d: [2, 2, 2, 2, 4, 1, 1, 2, 2, 2, 2, 2, 2, 2], ax: 43.5, ay: 50.5 },
+        Shoot:  { w: 56, h: 64, n: 11, r: 8, d: [4, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 27.5, ay: 34.5 },
+        Charge: { w: 48, h: 56, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 23.5, ay: 31.5 },
+        Hurt:   { w: 64, h: 64, n: 2,  r: 8, d: [2, 8], ax: 31.5, ay: 33.5 },
+        Faint:  { w: 40, h: 40, n: 2,  r: 8, d: [12, 14], ax: 19.5, ay: 25.5 }
+      } }
+    },
+    94: {
+      name: 'Mega Gengar', skin: '94_mega', hue: 95, color: '#b46bff', light: '#d9b3ff',
+      meta: { s: 2, a: {
+        Idle:   { w: 40, h: 40, n: 8,  r: 8, d: [40, 4, 3, 3, 3, 3, 3, 4], ax: 19.5, ay: 26.5 },
+        Walk:   { w: 40, h: 40, n: 4,  r: 8, d: [8, 10, 8, 10], ax: 19.5, ay: 26.5 },
+        Attack: { w: 80, h: 80, n: 11, r: 8, d: [4, 2, 4, 1, 1, 1, 2, 2, 2, 2, 4], ax: 39.5, ay: 46.5 },
+        Shoot:  { w: 64, h: 64, n: 12, r: 8, d: [2, 4, 1, 1, 10, 2, 2, 2, 2, 2, 2, 2], ax: 31.5, ay: 35.5 },
+        Charge: { w: 48, h: 40, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 23.5, ay: 26.0 },
+        Hurt:   { w: 48, h: 48, n: 2,  r: 8, d: [2, 8], ax: 23.5, ay: 26.5 },
+        Faint:  { w: 40, h: 40, n: 2,  r: 8, d: [12, 14], ax: 19.5, ay: 28.0 }
+      } }
     }
   };
+  function megaOf(p) { return p && MEGAS[p.dex] || null; }
 
   // Aura: 21 quadros de 192 px — 0-8 brilhos, 9-18 chamas de cristal, 19-20 anel
   var AURA_FPS = 14, AURA_N = 21, SWAP_AT = 9, CELL = 192, FEET_Y = 164;
 
   var PS = null;
   var aura = new Image(); aura.src = 'assets/ui/mega-aura.webp';
+  var auraTint = {};            // hue -> canvas com a aura recolorida
+  function auraImg(hue) {
+    if (!hue) return aura;
+    if (auraTint[hue]) return auraTint[hue];
+    var c = document.createElement('canvas');
+    c.width = aura.naturalWidth; c.height = aura.naturalHeight;
+    var x = c.getContext('2d');
+    x.filter = 'hue-rotate(' + hue + 'deg) saturate(1.2)';
+    x.drawImage(aura, 0, 0);
+    return (auraTint[hue] = c);
+  }
 
   var st = { active: false, t: 0, cd: 0, fx: null, p: null };
   var remoteFx = [];            // auras dos colegas no coop: { pl, t, kind, swapped }
@@ -42,12 +67,13 @@
 
   function player() { return PS && PS.Game && PS.Game.player; }
   function playing() { var s = PS && PS.Game && PS.Game.state; return s === 'playing' || s === 'held'; }
-  function canMega(p) { return p && !p.remote && !p.dead && p.dex === BASE_DEX && !(p.evoT > 0); }
+  function canMega(p) { return p && !p.remote && !p.dead && !!megaOf(p) && !(p.evoT > 0); }
 
   // ------------------------------------------------------------ troca de sprite
   function setSkin(p, mega) {
     var dir = p.anim ? p.anim.dir : 0;
-    if (mega) { p._megaMon = p.mon; p.mon = Object.assign({}, p.mon, { skin: SKIN }); }
+    var M = megaOf(p);
+    if (mega && M) { p._megaMon = p.mon; p.mon = Object.assign({}, p.mon, { skin: M.skin }); }
     else if (p._megaMon) { p.mon = p._megaMon; p._megaMon = null; }
     var skin = p.mon.skin || p.dex;
     p.anim = new PS.Sprites.Animator(skin, 1, p.shiny);
@@ -105,19 +131,20 @@
     try {
       PS.Audio.sfx('legend');
       PS.Camera.kick(0.8);
-      PS.Spawner.say('Charizard está Mega Evoluindo!', 2.4, true);
+      PS.Spawner.say(((PS.DEX_BY[p.dex] || {}).name || '') + ' está Mega Evoluindo!', 2.4, true);
     } catch (e) {}
   }
 
   function becomeMega(p) {
+    var M = megaOf(p) || MEGAS[6];
     setSkin(p, true);
     buff(p);
     st.active = true; st.t = DURATION;
     try {
-      PS.FX.ring(p.x, p.y, 10, 140, '#5fd4ff', 0.8, 6);
-      PS.FX.burst(p.x, p.y - 30, '#9ae6ff', 30, 220);
-      PS.FX.dmgText(p.x, p.y - p.bodyH - 14, 'MEGA! +50%', '#5fd4ff', true);
-      PS.Spawner.say('Mega Charizard X! +50% nos atributos por 30 s', 3.2, true);
+      PS.FX.ring(p.x, p.y, 10, 140, M.color, 0.8, 6);
+      PS.FX.burst(p.x, p.y - 30, M.light, 30, 220);
+      PS.FX.dmgText(p.x, p.y - p.bodyH - 14, 'MEGA! +50%', M.color, true);
+      PS.Spawner.say(M.name + '! +50% nos atributos por 30 s', 3.2, true);
       PS.Audio.sfx('shinyGet');
     } catch (e) {}
   }
@@ -130,7 +157,7 @@
       if (!silent) {
         st.fx = { t: 1.36, swapped: true, kind: 'out' };   // só o anel final
         try {
-          PS.FX.burst(p.x, p.y - 20, '#9ae6ff', 18, 160);
+          PS.FX.burst(p.x, p.y - 20, (megaOf(p) || MEGAS[6]).light, 18, 160);
           PS.Spawner.say('A Mega Evolução acabou', 2.2, true);
         } catch (e) {}
       }
@@ -188,7 +215,7 @@
       if (f.kind === 'in' && !f.swapped && fr >= SWAP_AT) {
         f.swapped = true;
         if (!f.pl._megaMon) setSkin(f.pl, true);
-        try { PS.FX.ring(f.pl.x, f.pl.y, 10, 140, '#5fd4ff', 0.8, 6); } catch (e) {}
+        try { PS.FX.ring(f.pl.x, f.pl.y, 10, 140, (megaOf(f.pl) || MEGAS[6]).color, 0.8, 6); } catch (e) {}
       }
       if (fr >= AURA_N) remoteFx.splice(i, 1);
     }
@@ -197,7 +224,7 @@
     if (hbT <= 0) {
       hbT = 2;
       var p = player();
-      if (p && (p.dex === BASE_DEX || st.active)) netSend(st.active || (st.fx && st.fx.kind === 'in') ? 1 : 0);
+      if (p && (megaOf(p) || st.active)) netSend(st.active || (st.fx && st.fx.kind === 'in') ? 1 : 0);
     }
   }
 
@@ -223,15 +250,16 @@
   // ------------------------------------------------------------ desenho da aura (no mundo)
   function auraFor(pl, t) {
     return {
-      y: pl.y + 3,                                 // desenhado logo à frente do Charizard
+      y: pl.y + 3,                                 // desenhado logo à frente do Pokémon
       draw: function (ctx) {
+        var img = auraImg((megaOf(pl) || MEGAS[6]).hue);
         var f = Math.min(AURA_N - 1, Math.floor(t * AURA_FPS));
         var size = Math.max(150, (pl.bodyH || 60) * 2.6);
         var sc = size / CELL;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 0.95;
-        ctx.drawImage(aura, f * CELL, 0, CELL, CELL, pl.x - size / 2, pl.y - FEET_Y * sc, size, size);
+        ctx.drawImage(img, f * CELL, 0, CELL, CELL, pl.x - size / 2, pl.y - FEET_Y * sc, size, size);
         ctx.restore();
       }
     };
@@ -289,6 +317,8 @@
     if (!show) return;
     var cd = b.querySelector('.cd'), txt = '';
     b.classList.toggle('on', st.active);
+    var M = megaOf(p) || MEGAS[6];
+    if (b.dataset.m !== M.skin) { b.dataset.m = M.skin; b.style.borderColor = M.color; b.title = M.name + ' (F)'; }
     b.classList.toggle('wait', !st.active && st.cd > 0);
     b.classList.toggle('ready', !st.active && st.cd <= 0 && !st.fx);
     if (st.active) txt = Math.ceil(st.t);
@@ -298,7 +328,7 @@
 
   // ------------------------------------------------------------ instalação
   function install() {
-    PS.SPRITE_META[SKIN] = META;
+    Object.keys(MEGAS).forEach(function (d) { PS.SPRITE_META[MEGAS[d].skin] = MEGAS[d].meta; });
     css();
 
     // relógio: Stats.dpsTick roda uma vez por quadro, só com o jogo rodando
@@ -336,9 +366,9 @@
 
     if (PS.Net && PS.Net.on) PS.Net.on(onNet);
 
-    PS.Sprites.preload([SKIN], 8000, false);
+    PS.Sprites.preload(Object.keys(MEGAS).map(function (d) { return MEGAS[d].skin; }), 8000, false);
     requestAnimationFrame(uiLoop);
-    window.__mega = { state: function () { return st; }, activate: activate,
+    window.__mega = { state: function () { return st; }, activate: activate, list: MEGAS,
       _test: { onNet: onNet, remote: function () { return { fx: remoteFx, on: remoteOn }; } } };
   }
 
