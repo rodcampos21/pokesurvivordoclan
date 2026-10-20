@@ -1,11 +1,12 @@
 /* =====================================================================
  * BOSS RUSH (map 6) — one legendary at a time, in an alternate version of
  * Arceus's arena.
- *  · Menu: 4 bosses from easiest to hardest. Each one unlocks after the
- *    previous one is beaten. For now only Primal Groudon is available.
- *  · Before the fight: +100 levels to spend and 3 bonds. When you're done
+ *  · Menu: 4 bosses from easiest to hardest (Primal Groudon < Primal Kyogre <
+ *    Mega Rayquaza < Deoxys Attack). Each one unlocks after the previous one
+ *    is beaten. Each has its own closed arena and weather.
+ *  · Before the fight: +100 levels, 12 bonds and 1 item of your choice. When you're done
  *    (or press Ready), a 10 → 0 countdown starts and the boss appears.
- *  · The boss uses its in-game moves (Groudon's boss repertoire), scaled up:
+ *  · Each boss uses its in-game boss moves (decided by its types), scaled up:
  *    more damage, damage reduction, faster casts, a hunting AI and a fury
  *    phase. HP scales with the team (1-4 players) and its defense adapts to
  *    the group's real DPS, so it stays a hard fight even at level 100.
@@ -18,41 +19,78 @@
   var PS = null;
 
   // ------------------------------------------------------------ bosses
+  // Difficulty goes up in this order: Groudon < Kyogre < Rayquaza < Deoxys.
   var BOSSES = [
     { id: 'groudon', name: 'Primal Groudon', stars: 1, label: 'Easy', color: '#ff5a3c', glow: 'rgba(255,90,60,.55)',
-      img: 'assets/ui/bossrush/groudon.webp', ready: true },
+      img: 'assets/ui/bossrush/groudon.webp', ready: true,
+      skin: '383_primal', base: 383, types: ['ground', 'fire'], behavior: 'chase', farLike: 0.2, arena: 'primal', flash: '#ff7a2a',
+      say: { wake: 'Primal Groudon awakens! The land dries up…', fury: 'Primal Groudon is enraged! Desolate Land grows stronger!',
+        last: 'Precipice Blades! Primal Groudon fights with everything it has!' } },
     { id: 'kyogre', name: 'Primal Kyogre', stars: 2, label: 'Medium', color: '#3cb4ff', glow: 'rgba(60,180,255,.55)',
-      img: 'assets/ui/bossrush/kyogre.webp', ready: false },
+      img: 'assets/ui/bossrush/kyogre.webp', ready: true,
+      skin: '382_primal', base: 382, types: ['water'], behavior: 'ranged', farLike: 0.45, arena: 'abyss', flash: '#3cb4ff',
+      say: { wake: 'Primal Kyogre rises from the deep! The sea floods the arena…', fury: 'Primal Kyogre is enraged! Primordial Sea rages!',
+        last: 'Origin Pulse! Primal Kyogre unleashes the whole ocean!' } },
     { id: 'rayquaza', name: 'Mega Rayquaza', stars: 3, label: 'Hard', color: '#45e07a', glow: 'rgba(69,224,122,.55)',
-      img: 'assets/ui/bossrush/rayquaza.webp', ready: false },
+      img: 'assets/ui/bossrush/rayquaza.webp', ready: true,
+      skin: '384_mega', base: 384, types: ['dragon', 'flying'], behavior: 'charger', farLike: 0.25, arena: 'sky', flash: '#45e07a',
+      say: { wake: 'Mega Rayquaza descends from the sky! Delta Stream howls…', fury: 'Mega Rayquaza is enraged! The winds tear the sky apart!',
+        last: 'Dragon Ascent! Mega Rayquaza strikes with all its power!' } },
     { id: 'deoxys', name: 'Deoxys (Attack)', stars: 4, label: 'Extreme', color: '#c86bff', glow: 'rgba(200,107,255,.55)',
-      img: 'assets/ui/bossrush/deoxys.webp', ready: false }
+      img: 'assets/ui/bossrush/deoxys.webp', ready: true,
+      skin: '386_attack', base: 386, types: ['psychic'], behavior: 'chase', farLike: 0.3, arena: 'cosmos', flash: '#c86bff',
+      say: { wake: 'Deoxys falls from space! The stars go silent…', fury: 'Deoxys is enraged! Its attack power explodes!',
+        last: 'Psycho Boost! Deoxys gives everything it has!' } }
   ];
+  var BY = {}; BOSSES.forEach(function (b) { BY[b.id] = b; });
+  function boss() { return BY[st.boss] || BOSSES[0]; }
 
-  // Primal Groudon: new sprites, Groudon's in-game boss moves (types decide the repertoire)
-  var PRIMAL_SKIN = '383_primal';
-  var PRIMAL_META = { s: 2, a: {
-    Idle:   { w: 72, h: 80, n: 14, r: 8, d: [60, 10, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 10], ax: 35.5, ay: 43.5 },
-    Walk:   { w: 72, h: 80, n: 4,  r: 8, d: [10, 12, 10, 12], ax: 35.5, ay: 44 },
-    Attack: { w: 88, h: 104, n: 10, r: 8, d: [2, 6, 1, 1, 2, 2, 2, 2, 2, 2], ax: 43.5, ay: 56 },
-    Shoot:  { w: 80, h: 88, n: 12, r: 8, d: [2, 2, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 39.5, ay: 48.5 },
-    Charge: { w: 64, h: 80, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 32, ay: 43.5 },
-    Hurt:   { w: 72, h: 80, n: 2,  r: 8, d: [2, 8], ax: 35.5, ay: 45.5 },
-    Faint:  { w: 64, h: 56, n: 2,  r: 1, d: [8, 14], ax: 31.5, ay: 36 }
-  } };
+  // New sprites (frame grids measured from the sheets)
+  var METAS = {
+    '383_primal': { s: 2, a: {
+      Idle:   { w: 72, h: 80, n: 14, r: 8, d: [60, 10, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 10], ax: 35.5, ay: 43.5 },
+      Walk:   { w: 72, h: 80, n: 4,  r: 8, d: [10, 12, 10, 12], ax: 35.5, ay: 44 },
+      Attack: { w: 88, h: 104, n: 10, r: 8, d: [2, 6, 1, 1, 2, 2, 2, 2, 2, 2], ax: 43.5, ay: 56 },
+      Shoot:  { w: 80, h: 88, n: 12, r: 8, d: [2, 2, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 39.5, ay: 48.5 },
+      Charge: { w: 64, h: 80, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 32, ay: 43.5 },
+      Hurt:   { w: 72, h: 80, n: 2,  r: 8, d: [2, 8], ax: 35.5, ay: 45.5 },
+      Faint:  { w: 64, h: 56, n: 2,  r: 1, d: [8, 14], ax: 31.5, ay: 36 } } },
+    '382_primal': { s: 2, a: {
+      Idle:   { w: 64, h: 72, n: 10, r: 8, d: [10, 14, 14, 14, 14, 10, 14, 14, 14, 14], ax: 31, ay: 40 },
+      Walk:   { w: 64, h: 72, n: 10, r: 8, d: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8], ax: 31, ay: 40 },
+      Attack: { w: 80, h: 72, n: 10, r: 8, d: [2, 6, 1, 1, 2, 2, 2, 2, 2, 2], ax: 39, ay: 48 },
+      Shoot:  { w: 72, h: 72, n: 11, r: 8, d: [2, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 35, ay: 43 },
+      Charge: { w: 64, h: 64, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 31.5, ay: 34.5 },
+      Hurt:   { w: 64, h: 88, n: 2,  r: 8, d: [2, 8], ax: 31.5, ay: 45 },
+      Faint:  { w: 64, h: 72, n: 6,  r: 1, d: [4, 4, 4, 6, 8, 14], ax: 30.8, ay: 42 } } },
+    '384_mega': { s: 2, a: {
+      Idle:   { w: 144, h: 136, n: 10, r: 8, d: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8], ax: 71.2, ay: 71.5 },
+      Walk:   { w: 144, h: 128, n: 4,  r: 8, d: [8, 8, 8, 8], ax: 71.5, ay: 68 },
+      Attack: { w: 176, h: 144, n: 10, r: 8, d: [2, 4, 1, 1, 1, 2, 2, 2, 2, 2], ax: 88, ay: 76 },
+      Shoot:  { w: 120, h: 136, n: 11, r: 8, d: [2, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 59.5, ay: 76 },
+      Charge: { w: 128, h: 136, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 64.2, ay: 64.5 },
+      Hurt:   { w: 104, h: 144, n: 2,  r: 8, d: [2, 8], ax: 52.8, ay: 71 },
+      Faint:  { w: 72, h: 96, n: 8,  r: 1, d: [4, 4, 4, 4, 4, 6, 8, 14], ax: 41, ay: 53.5 } } },
+    '386_attack': { s: 2, a: {
+      Idle:   { w: 40, h: 64, n: 4,  r: 8, d: [12, 12, 12, 12], ax: 20, ay: 30 },
+      Walk:   { w: 40, h: 64, n: 10, r: 8, d: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], ax: 19.5, ay: 28.5 },
+      Attack: { w: 72, h: 80, n: 11, r: 8, d: [2, 6, 1, 1, 1, 2, 2, 2, 2, 2, 2], ax: 35.5, ay: 40 },
+      Shoot:  { w: 48, h: 72, n: 10, r: 8, d: [2, 2, 2, 8, 1, 1, 2, 3, 2, 4], ax: 24, ay: 35 },
+      Charge: { w: 40, h: 56, n: 10, r: 8, d: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2], ax: 20, ay: 27 },
+      Hurt:   { w: 40, h: 64, n: 2,  r: 8, d: [2, 8], ax: 20, ay: 31 },
+      Faint:  { w: 32, h: 56, n: 2,  r: 1, d: [8, 14], ax: 16, ay: 27.5 } } }
+  };
 
-  // Difficulty (solo base; team scaling below)
+  // Difficulty (solo base; team scaling below). Each boss is stronger than the previous one.
+  //   hp: HP for 1 player (×1.8 / ×2.5 / ×3.2 with 2 / 3 / 4 players) · dmg: body/slam/dash ·
+  //   shot: projectiles/rain · castK: how often it attacks (1 = normal boss) ·
+  //   armor: minimum damage reduction (rises with the team's damage) · target: fight length (s) ·
+  //   farMax: longest time it stays away from you (s)
   var TUNE = {
-    groudon: {
-      hp: 5000000,       // HP for 1 player (×1.8 / ×2.5 / ×3.2 with 2 / 3 / 4 players)
-      dmg: 220,          // body / slam / dash damage
-      shot: 120,         // projectile / rain damage
-      spd: 92,
-      castK: 1.75,       // how often it attacks (1 = normal boss)
-      armor: 0.35,       // minimum damage reduction (rises with the team's damage)
-      target: 150,       // the fight lasts about 150 s
-      farMax: 1.2        // never stays away from you for more than 1.2 s
-    }
+    groudon:  { hp: 5000000, dmg: 220, shot: 120, spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
+    kyogre:   { hp: 6000000, dmg: 250, shot: 145, spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
+    rayquaza: { hp: 7000000, dmg: 285, shot: 160, spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
+    deoxys:   { hp: 8000000, dmg: 330, shot: 185, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
   };
   function teamHp(n) { return [1, 1, 1.8, 2.5, 3.2][Math.max(1, Math.min(4, n))]; }
   function teamDmg(n) { return 1 + 0.12 * (Math.max(1, Math.min(4, n)) - 1); }
@@ -73,10 +111,9 @@
   function unlocked(i) { return i === 0 || !!prog().beaten[BOSSES[i - 1].id]; }
 
   // ------------------------------------------------------------ map
-  var arenaBiome = -1;
   var MAP = {
     n: BR, name: 'Boss Rush', bossRush: true,
-    get biome() { return arenaBiome >= 0 ? arenaBiome : 4; },
+    get biome() { var A = ARENAS[boss().arena]; return A && A.biome >= 0 ? A.biome : 4; },
     types: ['ground', 'fire'],
     arceusK: 1, legendK: 1, arceusMin: 0, legendMin: 0,
     // full reward on the first win against each boss, smaller on replays
@@ -91,29 +128,62 @@
   function coopOn() { return !!(PS.Coop && PS.Coop.active && PS.Net); }
   function isHost() { return !coopOn() || !!PS.Coop.isHost; }
 
-  // Alternate Arceus arena: same layout as the Judgment ruins, primal lava colors and Drought sun
+  // Closed arenas (same ring of walls as Arceus's Judgment arena), one per boss
+  var ARENAS = {
+    primal: { from: 'judgment', weather: 'sun',
+      theme: { name: 'Primal Ruins', floor: '#3b2622', wall: '#1d1312', liquid: 'lava', liq: '#ff6a1a', foam: '#ffd27a',
+        prop: 'dead', leaf: '#3a2621', trunk: '#241614', flowers: ['#ff8d3d', '#ffc45e', '#8a3a2a'],
+        grass: '#4a2c24', rock: '#5c3a32', pools: 0.14, pillars: 0.035, props: { tree: 0.006, rock: 0.022 } },
+      pal: { name: 'Primal Ruins', liquid: 'lava',
+        floor: ['#3b2622', '#432b26', '#36231f'], dirt: ['#2e1d1a', '#33201c', '#2a1a17'], speck: '#281816',
+        light: '#7a4a3a', flowers: ['#ff8d3d', '#ffc45e', '#8a3a2a'],
+        wallTop: ['#241716', '#2e1d1b', '#211514'], wallLight: '#7a4b40', wallEdge: '#0b0606',
+        wallFace: ['#1a100f', '#170e0d'], wallFaceDark: '#110909',
+        liq: '#ff6a1a', liqDeep: '#c23a0c', foam: '#ffd27a', shore: '#2a1714',
+        prop: 'dead', leaf: ['#2a1916', '#3a2621', '#4a2e27', '#8a5a48'], trunk: ['#1d1210', '#241614'],
+        rock: ['#4e332c', '#5c3a32', '#7e5648'], grass: ['#3a221d', '#4a2c24', '#6e4436'] } },
+    abyss: { from: 'water', weather: 'storm',
+      theme: { name: 'Primordial Abyss', floor: '#15405a', wall: '#0c2236', liquid: 'water', liq: '#1e6fd0', foam: '#bfeaff',
+        prop: 'crystal', leaf: '#2a9ac0', trunk: '#14385a', flowers: ['#7ef0d0', '#5fd0e8', '#ffffff'],
+        grass: '#1e6a88', rock: '#2c5a78', pools: 0.26, pillars: 0.03, props: { tree: 0.012, rock: 0.015 } },
+      pal: { name: 'Primordial Abyss', liquid: 'water',
+        floor: ['#123a52', '#15405a', '#10354c'], dirt: ['#0e2e42', '#103248', '#0c2a3c'], speck: '#0b2638',
+        light: '#3a7aa0', flowers: ['#7ef0d0', '#5fd0e8', '#ffffff'],
+        wallTop: ['#0c2236', '#102a40', '#0a1e30'], wallLight: '#3f7fa8', wallEdge: '#03080e',
+        wallFace: ['#081826', '#071522'], wallFaceDark: '#040c14',
+        liq: '#1e6fd0', liqDeep: '#0e3f8a', foam: '#bfeaff', shore: '#0b2133',
+        prop: 'crystal', leaf: ['#1a6a8a', '#2a9ac0', '#5fd0e8', '#bff4ff'], trunk: ['#0e2a40', '#14385a'],
+        rock: ['#1e4560', '#2c5a78', '#4a7f9f'], grass: ['#14506a', '#1e6a88', '#3f8aa8'] } },
+    sky: { from: 'flying', weather: 'winds',
+      theme: { name: 'Sky Pillar Summit', floor: '#a9bfdc', wall: '#e6eef8', liquid: 'water', liq: '#cfe6ff', foam: '#ffffff',
+        prop: 'tree', leaf: '#e2eefb', trunk: '#9aa8c0', flowers: ['#ffffff', '#ffe14d', '#bfe0ff'],
+        grass: '#b4cae2', rock: '#c8d4e4', pools: 0.06, pillars: 0.03, props: { tree: 0.012, rock: 0.012 } },
+      pal: { name: 'Sky Pillar Summit', liquid: 'water',
+        floor: ['#a9bfdc', '#b3c8e3', '#9fb6d4'], dirt: ['#94acc9', '#9bb2ce', '#8ea5c2'], speck: '#8aa0bd',
+        light: '#e8f2ff', flowers: ['#ffffff', '#ffe14d', '#bfe0ff'],
+        wallTop: ['#e6eef8', '#f0f6fd', '#dde7f3'], wallLight: '#ffffff', wallEdge: '#5c6f8a',
+        wallFace: ['#b9c8dc', '#aebfd5'], wallFaceDark: '#8a9ab3',
+        liq: '#cfe6ff', liqDeep: '#9cc6f2', foam: '#ffffff', shore: '#8fa6c4',
+        prop: 'tree', leaf: ['#cfe0f2', '#e2eefb', '#f3f8ff', '#ffffff'], trunk: ['#8a98b0', '#9aa8c0'],
+        rock: ['#b8c6d8', '#c8d4e4', '#dfe7f2'], grass: ['#a0b8d4', '#b4cae2', '#cfe0f2'] } },
+    cosmos: { from: 'psychic', zz: 2, weather: 'psychic',
+      theme: { name: 'Cosmic Void', floor: '#141028', wall: '#07050f', liquid: 'water', liq: '#5a3cff', foam: '#c9b8ff',
+        prop: 'crystal', leaf: '#c03ad0', trunk: '#2a2060', flowers: ['#ff6bd0', '#6bf0ff', '#ffe14d'],
+        grass: '#3a3a9a', rock: '#454d88', pools: 0.08, pillars: 0.04, props: { tree: 0.02, rock: 0.012 } },
+      pal: { name: 'Cosmic Void', liquid: 'water',
+        floor: ['#120e24', '#16112c', '#0f0c20'], dirt: ['#0c0a1a', '#0f0c20', '#0a0816'], speck: '#e8dcff',
+        light: '#6a50d0', liq: '#5a3cff', liqDeep: '#2a1a8a', foam: '#c9b8ff', shore: '#0d0a1c' } }
+  };
   function installArena(T) {
-    if (!T || !T.BIOMES || !T.ARENA_THEMES || arenaBiome >= 0) return;
-    var j = T.ARENA_THEMES.judgment || {};
-    T.ARENA_THEMES.primal = Object.assign({}, j, {
-      name: 'Primal Ruins', floor: '#3b2622', wall: '#1d1312', liquid: 'lava', liq: '#ff6a1a', foam: '#ffd27a',
-      prop: 'dead', leaf: '#3a2621', trunk: '#241614', flowers: ['#ff8d3d', '#ffc45e', '#8a3a2a'],
-      grass: '#4a2c24', rock: '#5c3a32', pools: 0.14, pillars: 0.035, props: { tree: 0.006, rock: 0.022 },
-      weather: 'sun'
+    if (!T || !T.BIOMES || !T.ARENA_THEMES || T.__brArenas) return;
+    T.__brArenas = true;
+    Object.keys(ARENAS).forEach(function (k) {
+      var A = ARENAS[k];
+      T.ARENA_THEMES['br_' + k] = Object.assign({}, T.ARENA_THEMES[A.from] || T.ARENA_THEMES.judgment || {}, A.theme, { weather: A.weather });
+      var baseIdx = A.zz != null && T.ZZ ? T.ZZ[A.zz] : (T.arenaBiome ? T.arenaBiome(A.from) : 21);
+      A.biome = T.BIOMES.length;
+      T.BIOMES.push(Object.assign({}, T.BIOMES[baseIdx] || {}, A.pal));
     });
-    var jb = T.BIOMES[T.arenaBiome ? T.arenaBiome('judgment') : 21] || {};
-    var b = Object.assign({}, jb, {
-      name: 'Primal Ruins', liquid: 'lava',
-      floor: ['#3b2622', '#432b26', '#36231f'], dirt: ['#2e1d1a', '#33201c', '#2a1a17'], speck: '#281816',
-      light: '#7a4a3a', flowers: ['#ff8d3d', '#ffc45e', '#8a3a2a'],
-      wallTop: ['#241716', '#2e1d1b', '#211514'], wallLight: '#7a4b40', wallEdge: '#0b0606',
-      wallFace: ['#1a100f', '#170e0d'], wallFaceDark: '#110909',
-      liq: '#ff6a1a', liqDeep: '#c23a0c', foam: '#ffd27a', shore: '#2a1714',
-      prop: 'dead', leaf: ['#2a1916', '#3a2621', '#4a2e27', '#8a5a48'], trunk: ['#1d1210', '#241614'],
-      rock: ['#4e332c', '#5c3a32', '#7e5648'], grass: ['#3a221d', '#4a2c24', '#6e4436']
-    });
-    arenaBiome = T.BIOMES.length;
-    T.BIOMES.push(b);
   }
 
   // ------------------------------------------------------------ run state
@@ -142,8 +212,11 @@
     try { PS.Pickups.clear(); } catch (e) {}
     try { PS.Hazards && PS.Hazards.clear(); } catch (e) {}
     try { PS.Weather && PS.Weather.clear && PS.Weather.clear(); } catch (e) {}
-    W.setArena({ tx: tx, ty: ty, r: 24, type: 'primal' });
-    W.setBiome(arenaBiome, true);
+    var A = ARENAS[boss().arena] || ARENAS.primal;
+    W.setArena({ tx: tx, ty: ty, r: 24, type: 'br_' + boss().arena });
+    W.setBiome(A.biome, true);
+    st.weather = A.weather;
+    try { PS.Weather.force(A.weather, 999); } catch (e) {}
     var cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
     st.center = { x: cx, y: cy };
     var all = [];
@@ -218,21 +291,22 @@
   }
 
   function bossDef() {
-    var T = TUNE[st.boss] || TUNE.groudon, n = teamSize();
+    var T = TUNE[st.boss] || TUNE.groudon, n = teamSize(), B = boss();
     return {
-      dex: PRIMAL_SKIN, name: 'Primal Groudon',
+      dex: B.skin, name: B.name,
       hp: Math.round(T.hp * teamHp(n)), spd: T.spd,
       dmg: Math.round(T.dmg * teamDmg(n)), xp: 0,
-      behavior: 'chase', shotDmg: Math.round(T.shot * teamDmg(n)), shotCd: 0.7, range: 320
+      behavior: B.behavior, shotDmg: Math.round(T.shot * teamDmg(n)), shotCd: 0.7, range: 320
     };
   }
   function spawnBoss() {
     var T = TUNE[st.boss] || TUNE.groudon, TS = PS.World.TS || 32, c = st.center || { x: 0, y: 0 };
     var e = new PS.Enemy(bossDef(), c.x, c.y - 5 * TS, { hp: 1, dmg: 1, spd: 1 }, true);
-    e.types = ['ground', 'fire']; e.atkType = 'ground';
+    var B = boss();
+    e.types = B.types.slice(); e.atkType = B.types[0];
     e.brBoss = true;
     e.castK = T.castK * teamCast(teamSize());
-    try { e.bossInit(); e.ai.farLike = 0.2; e.ai.mode = 'close'; e.ai.modeT = 8; } catch (er) {}
+    try { e.bossInit(); e.ai.farLike = B.farLike; e.ai.mode = 'close'; e.ai.modeT = 8; } catch (er) {}
     e.brK = 1 - T.armor;
     var hurt = e.hurt;
     e.hurt = function (amount) {
@@ -246,9 +320,9 @@
     };
     PS.EnemyMgr.add(e);
     st.e = e; st.fightT = 0; st.rawAcc = 0; st.winT2 = 0; st.rawDps = 0;
-    try { PS.Sprites.preload([PRIMAL_SKIN], 4000); } catch (er) {}
-    say('Primal Groudon awakens! The land dries up…', 4);
-    try { PS.Camera.kick(1.6); PS.Audio.sfx('legend'); PS.Game.flash && PS.Game.flash('#ff7a2a', 0.6); } catch (er) {}
+    try { PS.Sprites.preload([B.skin], 4000); } catch (er) {}
+    say(B.say.wake, 4);
+    try { PS.Camera.kick(1.6); PS.Audio.sfx('legend'); PS.Game.flash && PS.Game.flash(B.flash, 0.6); } catch (er) {}
   }
 
   // Adaptive defense: the HP bar never jumps. Every 2 s the boss measures the
@@ -275,11 +349,13 @@
     var e = st.e, T = TUNE[st.boss] || TUNE.groudon;
     if (!e) return;
     st.fightT += dt;
+    // the arena weather never ends (renewed before it runs out)
+    try { var Wc = PS.Weather.current; if (st.weather && (!Wc || Wc.kind !== st.weather || Wc.left < 900)) PS.Weather.force(st.weather, 999); } catch (er) {}
     if (e.dead) {
       if (!st.won) {
         st.won = true; st.winT = 0;
         markBeaten(st.boss);
-        say('PRIMAL GROUDON IS DEFEATED!', 5);
+        say(boss().name.toUpperCase() + ' IS DEFEATED!', 5);
         try { PS.Audio.sfx('legend'); } catch (er) {}
         if (coopOn()) { try { PS.Net.broadcast({ k: 'br', t: 'won', boss: st.boss }); } catch (er) {} }
       }
@@ -293,13 +369,13 @@
     if (!st.fury && e.hp < 0.5 * e.maxHp) {
       st.fury = true;
       e.castK *= 1.2; e.spd *= 1.15; e.dmg *= 1.2;
-      say('Primal Groudon is enraged! Desolate Land grows stronger!', 3.4);
+      say(boss().say.fury, 3.4);
       try { PS.Camera.kick(1.2); } catch (er) {}
     }
     if (!st.desperate && e.hp < 0.2 * e.maxHp) {
       st.desperate = true;
       e.castK *= 1.15;
-      say('Precipice Blades! Primal Groudon fights with everything it has!', 3.4);
+      say(boss().say.last, 3.4);
     }
     adapt(dt);
   }
@@ -387,7 +463,7 @@
     if (ui) return ui;
     css();
     var prep = document.createElement('div'); prep.id = 'br-prep'; prep.setAttribute('translate', 'no');
-    prep.innerHTML = '<h4>BOSS RUSH · PRIMAL GROUDON</h4>' +
+    prep.innerHTML = '<h4>BOSS RUSH</h4>' +
       '<p>Spend your <b>100 level-ups</b> (★ box or Shift), your <b>12 bonds</b> and pick <b>1 item</b>.</p>' +
       '<div class="br-st"></div>' +
       '<div class="br-it"></div><br>' +
@@ -433,6 +509,8 @@
         st.sentReady = true;
         try { PS.Net.toHost({ k: 'br', t: 'ready', u: PS.Coop.me }); } catch (e) {}
       }
+      var h4 = 'BOSS RUSH · ' + boss().name.toUpperCase(), h4el = u.prep.querySelector('h4');
+      if (h4el.textContent !== h4) h4el.textContent = h4;
       var txt = 'Level-ups left: <b>' + left + '</b> · Bonds left: <b>' + bonds + '</b>';
       var itTxt = st.item ? (PS.Icons ? PS.Icons.html(st.item, 22) : '') + ' Item: <b>' + itemName(st.item) + '</b>' : 'Item: <b>none yet</b>';
       if (u.it.innerHTML !== itTxt) u.it.innerHTML = itTxt;
@@ -453,7 +531,7 @@
       if (n !== st.countShown) {
         st.countShown = n;
         u.n.textContent = n > 0 ? n : 'FIGHT!';
-        u.s.textContent = n > 0 ? 'PRIMAL GROUDON APPROACHES' : '';
+        u.s.textContent = n > 0 ? boss().name.toUpperCase() + ' APPROACHES' : '';
         u.n.style.animation = 'none'; void u.n.offsetWidth; u.n.style.animation = '';
         try { PS.Audio.sfx(n > 0 ? 'click' : 'boss'); } catch (e) {}
       }
@@ -614,13 +692,15 @@
 
   function install(ns) {
     PS = ns;
-    hookAfter(ns, 'SPRITE_META', function (M) { if (M) M[PRIMAL_SKIN] = PRIMAL_META; });
+    hookAfter(ns, 'SPRITE_META', function (M) { if (M) for (var k in METAS) M[k] = METAS[k]; });
     hookAfter(ns, 'DEX_BY', function (D) {
       if (!D) return;
-      Object.defineProperty(D, PRIMAL_SKIN, { configurable: true, enumerable: false, get: function () {
-        var g = D[383] || {};
-        return Object.assign({}, g, { dex: PRIMAL_SKIN, name: 'Primal Groudon', types: ['ground', 'fire'], leg: true });
-      } });
+      BOSSES.forEach(function (B) {
+        Object.defineProperty(D, B.skin, { configurable: true, enumerable: false, get: function () {
+          var g = D[B.base] || {};
+          return Object.assign({}, g, { dex: B.skin, name: B.name, types: B.types.slice(), leg: true });
+        } });
+      });
     });
     hookAfter(ns, 'Tiles', function (T) { installArena(T); });
     hookAfter(ns, 'Maps', function (M) {
