@@ -4,8 +4,9 @@
  *  · Menu: 4 bosses from easiest to hardest (Primal Groudon < Primal Kyogre <
  *    Mega Rayquaza < Deoxys Attack). Each one unlocks after the previous one
  *    is beaten. Each has its own closed arena and weather.
- *  · Before the fight: 50 points for Vigor/Power/Armor/Synthesis/Precision/Reflexes, then 4 moves
- *    from the Pokémon's pool (max level, bonded together), then 1 item. When you're done
+ *  · Before the fight: 50 points for Vigor/Power/Armor/Synthesis/Precision/Reflexes/Sprint,
+ *    then 4 moves from the Pokémon's pool (max level, already evolved when the move has an
+ *    evolution, bonded together), then 1 item. When you're done
  *    (or press Ready), a 10 → 0 countdown starts and the boss appears.
  *  · Each boss uses its in-game boss moves (decided by its types), scaled up:
  *    more damage, damage reduction, faster casts, a hunting AI and a fury
@@ -237,7 +238,7 @@
   //   2) pick 4 moves from the Pokémon's move pool: they come at max level, bonded together
   //   3) pick 1 item → countdown → fight
   var PREP_LEVELS = 50, PICK_MOVES = 4;
-  var PTS_STATS = ['hp', 'atk', 'def', 'rgn', 'crit', 'cd'];
+  var PTS_STATS = ['hp', 'atk', 'def', 'rgn', 'crit', 'cd', 'spd'];
   function grantPrep() {
     if (st.granted) return;
     var G = PS.Game, p = G.player;
@@ -505,7 +506,7 @@
 
 
   // ------------------------------------------------------------ step 1: distribute 50 points
-  var STAT_COL = { hp: '#ff5a6a', atk: '#f0a830', def: '#2fd08a', rgn: '#f5b22e', crit: '#9fb2d8', cd: '#ff6fb0' };
+  var STAT_COL = { spd: '#5fd4ff', hp: '#ff5a6a', atk: '#f0a830', def: '#2fd08a', rgn: '#f5b22e', crit: '#9fb2d8', cd: '#ff6fb0' };
   var ptsUi = null, movUi = null;
   function winCss() {
     if (document.getElementById('br-win-css')) return;
@@ -540,6 +541,7 @@
       '.br-win .mv .ic{flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center}' +
       '.br-win .mv b{display:block;font-size:14px}.br-win .mv small{display:block;font-size:11px;color:#c8d6f2;line-height:1.25}' +
       '.br-win .mv .lv{margin-left:auto;flex:none;font-size:11px;font-weight:900;color:#ffd23f}' +
+      '.br-win .mv .evo{font-size:11px;font-weight:700;color:#9fb2d8}.br-win .mv em{font-style:normal;color:#ffd23f}' +
       '@media (max-width:560px){.br-win .row{flex-wrap:wrap}.br-win .ctl{width:100%;justify-content:flex-end}}';
     document.head.appendChild(s);
   }
@@ -634,7 +636,7 @@
       movUi = document.createElement('div'); movUi.className = 'br-win'; movUi.id = 'br-moves'; movUi.setAttribute('translate', 'no');
       movUi.innerHTML = '<div class="bw"><div class="bw-h"><div><small>MOVE SELECTION</small><h3>Pick 4 Moves</h3></div>' +
         '<div class="bw-left">PICKED <b></b></div></div>' +
-        '<p style="margin:-4px 0 12px;font-size:13px;color:#c8d6f2">They start at max level and bonded together: all 4 fire at the same time.</p>' +
+        '<p style="margin:-4px 0 12px;font-size:13px;color:#c8d6f2">They start at max level (evolved when the move has an evolution) and bonded together: all 4 fire at the same time.</p>' +
         '<div class="mgrid"></div><div class="bw-go"><button class="btn gold" type="button" data-br="ok">Confirm</button></div></div>';
       document.body.appendChild(movUi);
       movUi.querySelector('[data-br="ok"]').onclick = confirmMoves;
@@ -643,9 +645,13 @@
     var grid = movUi.querySelector('.mgrid'); grid.innerHTML = '';
     poolOf(p).forEach(function (id) {
       var m = PS.Moves.BY_ID[id], b = document.createElement('button');
+      var evo = PS.Moves.EVO && PS.Moves.EVO[id];
+      var mods = evo && (m.evoText || (PS.Moves.EVO_MODS[m.kind] && PS.Moves.EVO_MODS[m.kind].t));
       b.type = 'button'; b.className = 'mv'; b.dataset.id = id;
-      b.innerHTML = '<span class="ic">' + (PS.Icons ? PS.Icons.html('move:' + id, 32) : '') + '</span><span><b>' + PS.T(m.name) + '</b>' +
-        '<small>' + PS.T(m.desc || '') + '</small></span><span class="lv">Lv.' + (m.maxLvl || 1) + '</span>';
+      b.innerHTML = '<span class="ic">' + (PS.Icons ? PS.Icons.html('move:' + id, 32) : '') + '</span><span><b>' +
+        (evo ? PS.T(evo[0]) + ' <span class="evo">★ ' + PS.T(m.name) + '</span>' : PS.T(m.name)) + '</b>' +
+        '<small>' + PS.T(m.desc || '') + (mods ? ' <em>' + PS.T(mods) + '</em>' : '') + '</small></span>' +
+        '<span class="lv">' + (evo ? 'EVOLVED' : 'Lv.' + (m.maxLvl || 1)) + '</span>';
       b.onclick = function () {
         var i = st.pickMoves.indexOf(id);
         if (i >= 0) st.pickMoves.splice(i, 1);
@@ -666,7 +672,11 @@
   }
   function confirmMoves() {
     var p = PS.Game.player; if (!p || !st.pickMoves.length) return;
-    var inst = st.pickMoves.map(function (id) { var d = PS.Moves.BY_ID[id]; return PS.Moves.instance(id, d.maxLvl || 1); });
+    var inst = st.pickMoves.map(function (id) {
+      var d = PS.Moves.BY_ID[id], m = PS.Moves.instance(id, d.maxLvl || 1);
+      try { if (PS.Moves.EVO && PS.Moves.EVO[id]) PS.Moves.evolve(m); } catch (e) {}   // evolved form when it exists
+      return m;
+    });
     try { PS.Projectiles.clearOrbs(p); } catch (e) {}
     p.moves = inst;
     p.slots = [inst.slice()];
