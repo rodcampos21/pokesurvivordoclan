@@ -27,8 +27,9 @@
   // Força dos inimigos (multiplica a escala normal do jogo).
   // Começa um pouco acima do nível 1 e termina perto do nível 3 (Infierno).
   function r2(x) { return Math.round(x * 100) / 100; }
-  function kFor(f) { return r2(1.25 + 0.45 * (f / FLOORS)); }   // vida   1.25 → 1.70
-  function dkFor(f) { return r2(1.10 + 0.25 * (f / FLOORS)); }  // dano   1.10 → 1.35
+  function kFor(f) { return r2(1.50 + 0.45 * (f / FLOORS)); }   // vida   1.50 → 1.95
+  function dkFor(f) { return r2(1.50 + 0.25 * (f / FLOORS)); }  // dano   1.50 → 1.75
+  var SPAWN_K = 1.25;       // +25% de inimigos nascendo (e nas marés)
 
   // Jogadores: o jogo já escala vida (×1+0,3/jogador extra) e quantidade de
   // inimigos (×1+0,75/jogador extra). Aqui somamos um pouco nos chefes e na cota.
@@ -107,7 +108,7 @@
   // ---------------------------------------------------------------- andares
   function quotaFor(f, n) {
     var T = SEC_PER_FLOOR * f, rate = PS.Spawner.rate ? PS.Spawner.rate(T) : 1;
-    var q = Math.round(Math.max(10, Math.min(140, rate * SEC_PER_FLOOR * 0.9)) * teamRate(n));
+    var q = Math.round(Math.max(10, Math.min(160, rate * SEC_PER_FLOOR * 0.9 * SPAWN_K)) * teamRate(n));
     return q;
   }
 
@@ -404,7 +405,9 @@
           if (S.tickBanner) S.tickBanner(dt);
           return;
         }
-        return update.call(this, dt, players, vtime());
+        window.__spawnK = SPAWN_K;
+        try { return update.call(this, dt, players, vtime()); }
+        finally { window.__spawnK = 1; }
       };
       S.snap = function () {
         var o = snap.apply(this, arguments);
