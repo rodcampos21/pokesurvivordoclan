@@ -131,8 +131,13 @@ service cloud.firestore {
     //   en el nivel 1/2/3. MENOS es mejor: mínimo 20 min (aparece en el minuto 20), como mucho 1 h
     //   y nunca más que el tiempo real desde que empezó tu sesión.
     //   lv_: nivel máximo (cada uno el suyo) · dp_: mejor DPS en 5 s (cada uno el suyo). Más es mejor.
+    // Perso (19-10-2026): Torre Sem Fim — ts_ (solo) y tg_ (grupo). MÁS es mejor.
+    //   t = andar × 10000 + (9999 − segundos)  (andar 101 = venció a Arceus).
+    //   Andar 1..101; segundos ≤ tiempo real desde que empezó la partida (+30 s);
+    //   al menos 3 s por andar; nivel y derrotados con margen como las demás tablas.
     function isArceusBoard(board) { return board.matches('a[123][sg]_.*'); }
     function isStatBoard(board) { return board.matches('(lv|dp)_.*'); }
+    function isTowerBoard(board) { return board.matches('t[sg]_.*'); }
     function baseEntry(d) {
       return d.keys().hasOnly(['t', 'uids', 'names', 'dex', 'shiny', 'lv', 'kills', 'at'])
         && d.t is int && d.t > 0
@@ -166,6 +171,23 @@ service cloud.firestore {
         && (resource == null || d.t > resource.data.t);
     }
 
+    function validTower(board, id) {
+      let d = request.resource.data;
+      let run = get(/databases/$(database)/documents/runs/$(me())).data;
+      let f = math.floor(d.t / 10000);
+      let s = 9999 - (d.t % 10000);
+      return baseEntry(d)
+        && f >= 1 && f <= 101
+        && s >= 1 && s >= f * 3
+        && s <= (request.time - run.startedAt).seconds() + 30
+        && d.lv <= 10 + s / 4
+        && d.kills <= 100 + s * 12
+        && (board.matches('ts_.*')
+              ? (d.uids.size() == 1 && id == me())
+              : (d.uids.size() >= 2 && d.uids.size() <= 4 && id == d.uids.join('_')))
+        && (resource == null || d.t > resource.data.t);
+    }
+
     function validEntry(board, id) {
       let d = request.resource.data;
       let run = get(/databases/$(database)/documents/runs/$(me())).data;
@@ -189,7 +211,8 @@ service cloud.firestore {
     match /lb/{board}/e/{id} {
       allow read: if signedIn();
       allow create, update: if signedIn() && (isArceusBoard(board) ? validArceus(board, id)
-                                             : isStatBoard(board) ? validStat(board, id) : validEntry(board, id));
+                                             : isStatBoard(board) ? validStat(board, id)
+                                             : isTowerBoard(board) ? validTower(board, id) : validEntry(board, id));
       allow delete: if signedIn() && (me() in resource.data.uids || admin());
     }
 

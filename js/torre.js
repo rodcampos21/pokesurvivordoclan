@@ -527,6 +527,51 @@
     if (u.badge.dataset.t !== txt) { u.badge.dataset.t = txt; u.badge.innerHTML = txt + '<small>' + w.desc + '</small>'; }
   }
 
+  // ---------------------------------------------------------------- RANKING
+  // Tabelas ts_* (solo) e tg_* (grupo), nos mesmos períodos das outras.
+  // Valor t = andar × 10000 + (9999 − segundos): mais alto ganha; no empate de
+  // andar, quem subiu mais rápido. Derrotar o Arceus conta como "andar 101".
+  var lastMembers = [], wasHost = false, submitted = false;
+  function towerT(floor, secs) { return floor * 10000 + (9999 - Math.max(1, Math.min(9998, Math.floor(secs)))); }
+  window.__towerFmt = function (t) {
+    var f = Math.floor(t / 10000), s = 9999 - (t % 10000);
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    var time = (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+    return f >= 101 ? '★ Zerou · ' + time : 'Andar ' + f + ' · ' + time;
+  };
+  function trackMembers() {
+    try {
+      if (PS.Coop && PS.Coop.active) { wasHost = !!PS.Coop.isHost; lastMembers = (PS.Coop.members || []).slice(); }
+    } catch (e) {}
+  }
+  function submitTower() {
+    if (submitted || !isTower()) return;
+    submitted = true;
+    try {
+      var R = PS.Ranking, me = PS.DB && PS.DB.online && PS.DB.fb, p = PS.Game.player;
+      if (!R || !R._put || !me || !me.uid || !PS.Social.me || !p || PS.Game.training) return;
+      if (PS.DevMenu && PS.DevMenu.on) return;
+      var floor = st.won ? 101 : st.floor, secs = PS.Game.gtime || 0;
+      if (floor < 2 || secs < floor * 3) return;
+      var group = lastMembers.length >= 2, entry, id, pre;
+      if (group) {
+        if (!wasHost) return;                       // no grupo, quem envia é o anfitrião
+        var mem = lastMembers.slice().sort(function (a, b) { return a.uid < b.uid ? -1 : 1; });
+        id = mem.map(function (m) { return m.uid; }).join('_'); pre = 'tg';
+        entry = { uids: mem.map(function (m) { return m.uid; }), names: mem.map(function (m) { return m.name; }),
+                  dex: mem.map(function (m) { return m.dex; }), shiny: mem.map(function (m) { return !!m.shiny; }) };
+      } else {
+        id = me.uid; pre = 'ts';
+        entry = { uids: [me.uid], names: [PS.Social.me.name], dex: [p.baseDex || p.dex], shiny: [!!p.shiny] };
+      }
+      entry.t = towerT(floor, secs); entry.lv = p.level | 0 || 1; entry.kills = p.kills | 0;
+      var boards = R.PERIODS.map(function (x) { return [R.board(pre, x[0], null), x[0]]; });
+      R._put(boards, id, entry).then(function (got) {
+        try { R._tag(got, 'Torre Sem Fim'); } catch (e) {}
+      }).catch(function (e) { console.warn('[torre ranking]', e); });
+    } catch (e) { console.warn('[torre ranking]', e); }
+  }
+
   // ---------------------------------------------------------------- chão do castelo
   // Desenhado logo depois do chão do jogo e antes dos líquidos/personagens:
   // lajotas em fileiras desencontradas e tochas nas paredes viradas para o salão.
@@ -781,10 +826,17 @@
     hookModule(ns, 'Stats', function (Sx) {
       var dps = Sx.dpsTick, rs = Sx.reset;
       Sx.dpsTick = function (dt) {
-        try { if (isTower()) wrathTick(dt); } catch (e) { console.error('[ira]', e); }
+        try { if (isTower()) { wrathTick(dt); trackMembers(); } } catch (e) { console.error('[ira]', e); }
         return dps.apply(this, arguments);
       };
-      Sx.reset = function () { wrath = null; wrathSpawn = 1; wrathSeen = {}; return rs.apply(this, arguments); };
+      Sx.reset = function () {
+        wrath = null; wrathSpawn = 1; wrathSeen = {}; submitted = false; lastMembers = []; wasHost = false;
+        return rs.apply(this, arguments);
+      };
+    });
+    hookModule(ns, 'RunUI', function (U) {
+      var so = U.showOver;
+      U.showOver = function () { try { submitTower(); } catch (e) {} return so.apply(this, arguments); };
     });
     hookModule(ns, 'Game', function (G) {
       var sv = G.saveRun;
