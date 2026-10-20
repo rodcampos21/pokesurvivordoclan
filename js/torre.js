@@ -88,12 +88,48 @@
     var p = PS.Game.player;
     return p ? Math.max(0, (p.kills || 0) - st.kills0) : 0;
   }
-  // Cenário: troca a cada chefe derrotado, em loop sem repetir
-  // (andares 1-5 no 1º mapa, 6-10 no 2º, … e depois de todos volta ao 1º).
+  // Cenário: o INFERNO — 3 variações exclusivas da torre, trocando a cada chefe
+  // derrotado, em loop (andares 1-5 Brasas, 6-10 Cinzas, 11-15 Abismo, 16-20 Brasas…).
+  var HELL = [
+    { // Brasas Eternas: chão carbonizado, lava viva, mato em chamas
+      name: 'Inferno · Brasas Eternas', liquid: 'lava',
+      floor: ['#2a1414', '#301818', '#251111'], dirt: ['#1b0c0b', '#200e0c', '#170a09'],
+      speck: '#3d1a12', light: '#5a2418', flowers: ['#ff5a1f', '#ffb02e', '#ff2e2e'],
+      wallTop: ['#221a1c', '#2a2022', '#1d1618'], wallLight: '#4a3434', wallEdge: '#050303',
+      wallFace: ['#160e0f', '#120b0c'], wallFaceDark: '#080505',
+      liq: '#ff3d12', liqDeep: '#b3180a', foam: '#ffd36a', shore: '#1c0b08', prop: 'dead',
+      leaf: ['#2a1a16', '#3a221c', '#4a2a20', '#6a3020'], trunk: ['#140c0a', '#22140f'],
+      rock: ['#2e2426', '#433638', '#5c4a4c'], grass: ['#4a1a10', '#7a2410', '#b8401a']
+    },
+    { // Vale das Cinzas: cinza e basalto, rios de sangue
+      name: 'Inferno · Vale das Cinzas', liquid: 'lava',
+      floor: ['#2b2729', '#312c2e', '#262224'], dirt: ['#1d1a1c', '#221e20', '#191618'],
+      speck: '#3b3335', light: '#555052', flowers: ['#c2b8b0', '#ff4a3a', '#8a7f78'],
+      wallTop: ['#1f1a1c', '#262022', '#1a1517'], wallLight: '#403a3c', wallEdge: '#040303',
+      wallFace: ['#141112', '#100d0e'], wallFaceDark: '#070505',
+      liq: '#8a0f12', liqDeep: '#520709', foam: '#ff5a4a', shore: '#160c0c', prop: 'dead',
+      leaf: ['#1e1a1a', '#2c2626', '#3c3434', '#4e4444'], trunk: ['#0f0c0c', '#1a1515'],
+      rock: ['#3a3436', '#4f4749', '#6a6062'], grass: ['#3a3032', '#5a4a4a', '#7a1a1a']
+    },
+    { // Abismo Carmesim: escuridão, miasma e cristais de sangue
+      name: 'Inferno · Abismo Carmesim', liquid: 'poison',
+      floor: ['#1d1018', '#22131c', '#190d14'], dirt: ['#140a10', '#180c13', '#11080e'],
+      speck: '#2e1624', light: '#4a1e36', flowers: ['#ff3a5a', '#c81e5a', '#ff9ab8'],
+      wallTop: ['#1a0e16', '#20111b', '#160b12'], wallLight: '#3e2234', wallEdge: '#030102',
+      wallFace: ['#10080d', '#0c060a'], wallFaceDark: '#050204',
+      liq: '#7a1a5a', liqDeep: '#4a0c36', foam: '#ff6ad5', shore: '#12070e', prop: 'crystal',
+      leaf: ['#5a0a14', '#8a1020', '#c41e2e', '#ff4a4a'], trunk: ['#1a0a10', '#2a0f18'],
+      rock: ['#2a1a24', '#3e2634', '#563648'], grass: ['#3a0c1a', '#5e1228', '#8a1a3a']
+    }
+  ];
+  var hellIdx = [];             // posições dos 3 infernos na lista de cenários do jogo
+  function installHell(T) {
+    if (hellIdx.length || !T || !T.BIOMES) return;
+    HELL.forEach(function (b) { hellIdx.push(T.BIOMES.length); T.BIOMES.push(b); });
+  }
   function mapLoop() {
-    var list = [0, 1, 2];                       // Bosque Umbrío, Cueva Cristal, Volcán Ceniza
-    try { list = list.concat(PS.Tiles.ZZ); } catch (e) {}   // + Zona Cero (3 cenários)
-    return list;
+    if (!hellIdx.length) { try { installHell(PS.Tiles); } catch (e) {} }
+    return hellIdx.length ? hellIdx : [2];
   }
   function biomeFor(f) {
     var list = mapLoop();
@@ -321,6 +357,51 @@
     PS.Game.giveItem(id);                     // equipa, ou pergunta se quer trocar
   }
 
+  // ---------------------------------------------------------------- clima do inferno
+  // vinheta vermelho-escura e brasas subindo pela tela (só na torre, em jogo)
+  var hellFx = null, embers = [], hellLast = 0;
+  function ensureHellFx() {
+    if (hellFx) return hellFx;
+    var wrap = document.createElement('div');
+    wrap.id = 'tower-hell';
+    wrap.innerHTML = '<canvas></canvas>';
+    document.body.appendChild(wrap);
+    var st2 = document.createElement('style');
+    st2.textContent =
+      '#tower-hell{position:fixed;inset:0;z-index:4;pointer-events:none;display:none;' +
+      'background:radial-gradient(ellipse at 50% 55%,rgba(0,0,0,0) 45%,rgba(40,0,0,.45) 78%,rgba(10,0,0,.8) 100%)}' +
+      '#tower-hell canvas{position:absolute;inset:0;width:100%;height:100%}' +
+      '@media (prefers-reduced-motion:reduce){#tower-hell canvas{display:none}}';
+    document.head.appendChild(st2);
+    hellFx = { el: wrap, cv: wrap.querySelector('canvas') };
+    return hellFx;
+  }
+  function hellLoop(now, show) {
+    var fx = ensureHellFx();
+    fx.el.style.display = show ? 'block' : 'none';
+    if (!show) { embers.length = 0; return; }
+    var cv = fx.cv, w = window.innerWidth, h = window.innerHeight;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    var dt = Math.min(0.05, (now - (hellLast || now)) / 1000); hellLast = now;
+    var paused = PS.Game.state !== 'playing';
+    while (embers.length < 46) {
+      embers.push({ x: Math.random() * w, y: h + Math.random() * h * 0.6, v: 25 + Math.random() * 55,
+        s: 1 + Math.random() * 2.2, ph: Math.random() * 6.28, a: 0.35 + Math.random() * 0.55 });
+    }
+    var c = cv.getContext('2d');
+    c.clearRect(0, 0, w, h);
+    for (var i = 0; i < embers.length; i++) {
+      var e = embers[i];
+      if (!paused) { e.y -= e.v * dt; e.ph += dt * 2; e.x += Math.sin(e.ph) * 12 * dt; }
+      if (e.y < -10) { e.y = h + 10; e.x = Math.random() * w; }
+      var fade = Math.min(1, e.y / (h * 0.35));
+      c.globalAlpha = e.a * fade;
+      c.fillStyle = i % 3 ? '#ff6a1f' : '#ffc23d';
+      c.fillRect(Math.round(e.x), Math.round(e.y), Math.ceil(e.s), Math.ceil(e.s));
+    }
+    c.globalAlpha = 1;
+  }
+
   // ---------------------------------------------------------------- HUD
   var hud = null, lastFloorSeen = 1;
   function ensureHud() {
@@ -338,6 +419,7 @@
     var show = isTower() && stt && stt !== 'ui' && stt !== 'over' && PS.Game.player;
     var h = ensureHud();
     h.style.display = show ? '' : 'none';
+    try { hellLoop(performance.now(), !!show); } catch (e) {}
     if (!show) return;
     var host = !(PS.Coop && PS.Coop.active) || PS.Coop.isHost;
     var f = host ? st.floor : lastFloorSeen;
@@ -449,6 +531,8 @@
       w.__tower = true;
       ns.onShinyCaught = w;
     });
+
+    hookModule(ns, 'Tiles', function (T) { installHell(T); });
 
     hookModule(ns, 'Rift', function (R) {
       var u = R.update;
