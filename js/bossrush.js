@@ -89,13 +89,14 @@
   //   armor: minimum damage reduction (rises with the team's damage) · target: fight length (s) ·
   //   farMax: longest time it stays away from you (s)
   var TUNE = {
-    groudon:  { hp: 5000000, dmg: 150, shot: 80,  spd: 92,  castK: 1.75, armor: 0.35, target: 150, farMax: 1.2 },
-    kyogre:   { hp: 6000000, dmg: 185, shot: 100, spd: 96,  castK: 1.95, armor: 0.40, target: 165, farMax: 1.6 },
-    rayquaza: { hp: 7000000, dmg: 220, shot: 120, spd: 118, castK: 2.15, armor: 0.45, target: 180, farMax: 1.0 },
-    deoxys:   { hp: 8000000, dmg: 260, shot: 145, spd: 130, castK: 2.45, armor: 0.50, target: 195, farMax: 0.9 }
+    // 20-10-2026 buff (players found it too easy): ~+45% damage, faster attacks and movement, longer fights
+    groudon:  { hp: 5000000, dmg: 215, shot: 115, spd: 102, castK: 2.10, armor: 0.35, target: 185, farMax: 1.0 },
+    kyogre:   { hp: 6000000, dmg: 265, shot: 145, spd: 106, castK: 2.35, armor: 0.40, target: 200, farMax: 1.3 },
+    rayquaza: { hp: 7000000, dmg: 315, shot: 175, spd: 130, castK: 2.60, armor: 0.45, target: 215, farMax: 0.8 },
+    deoxys:   { hp: 8000000, dmg: 375, shot: 210, spd: 145, castK: 2.95, armor: 0.50, target: 230, farMax: 0.7 }
   };
   function teamHp(n) { return [1, 1, 1.8, 2.5, 3.2][Math.max(1, Math.min(4, n))]; }
-  function teamDmg(n) { return 1 + 0.12 * (Math.max(1, Math.min(4, n)) - 1); }
+  function teamDmg(n) { return 1 + 0.15 * (Math.max(1, Math.min(4, n)) - 1); }
   function teamCast(n) { return 1 + 0.08 * (Math.max(1, Math.min(4, n)) - 1); }
 
   // ------------------------------------------------------------ progress
@@ -431,13 +432,14 @@
 
   function mechTick(dt, e) {
     schedTick(dt);
-    if (st.mT == null) st.mT = 9;
+    if (st.mT == null) st.mT = 7;
     st.mT -= dt;
     cloneTick(dt, e);
     if (st.mT > 0 || (e.ai && e.ai.cast) || e.jump) return;
     var list = MECH[st.boss] || MECH.groudon, m = list[(st.mI || 0) % 2];
     st.mI = (st.mI || 0) + 1;
-    st.mT = st.desperate ? 11 : st.fury ? 13 : 16;
+    // mechanics come more often (Kyogre keeps its old pace)
+    st.mT = st.boss === 'kyogre' ? (st.desperate ? 11 : st.fury ? 13 : 16) : (st.desperate ? 9 : st.fury ? 11 : 13);
     sayAll(MECH_SAY[m], 3);
     try { PS.Audio.sfx('boss'); e.anim.play('Charge', { speed: 1.2 }); } catch (er) {}
     START[m](e);
@@ -800,13 +802,13 @@
     }
     if (!st.fury && e.hp < 0.5 * e.maxHp) {
       st.fury = true;
-      e.castK *= 1.2; e.spd *= 1.15; scaleDmg(e, 1.2);
+      e.castK *= 1.25; e.spd *= 1.15; scaleDmg(e, 1.3);
       say(boss().say.fury, 3.4);
       try { PS.Camera.kick(1.2); } catch (er) {}
     }
     if (!st.desperate && e.hp < 0.2 * e.maxHp) {
       st.desperate = true;
-      e.castK *= 1.15;
+      e.castK *= 1.2; scaleDmg(e, 1.15);
       say(boss().say.last, 3.4);
     }
     try { mechTick(dt, e); } catch (er) { console.error('[bossrush mech]', er); }
