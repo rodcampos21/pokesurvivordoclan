@@ -288,7 +288,7 @@
     e.hurt = function (amount) {
       var a = Array.prototype.slice.call(arguments);
       st.rawAcc = (st.rawAcc || 0) + (+amount || 0);
-      a[0] = amount * (this.brK || (1 - T.armor));
+      a[0] = amount * (this.brK || (1 - T.armor)) * (st.shieldK || 1);
       var r = hurt.apply(this, a), now = performance.now();
       // under heavy fire the white hit flash hid the sprite: flash at most 4× per second
       if (now - (this._brFlash || 0) < 250) this.flash = 0; else this._brFlash = now;
@@ -296,6 +296,7 @@
     };
     PS.EnemyMgr.add(e);
     st.e = e; st.fightT = 0; st.rawAcc = 0; st.winT2 = 0; st.rawDps = 0;
+    fx = []; clones = []; st.sched = []; st.mT = null; st.mI = 0; st.shieldK = 1; st.shieldOn = false;
     try { PS.Sprites.preload([B.skin], 4000); } catch (er) {}
     say(B.say.wake, 4);
     try { PS.Camera.kick(1.6); PS.Audio.sfx('legend'); PS.Game.flash && PS.Game.flash(B.flash, 0.6); } catch (er) {}
@@ -352,6 +353,390 @@
     e.brK = e.brK ? e.brK * 0.4 + want * 0.6 : want;
   }
 
+  // ---------------------------------------------------------------- boss mechanics
+  // Two signature mechanics per boss, alternating every ~16 s (13 s in fury, 11 s at
+  // the end). Damage is a % of max HP that ignores armor (pure), so it hurts every
+  // build the same; everything is telegraphed and can be dodged.
+  //   Groudon : Precipice Blades (2 waves of rock lines) · Magma Surge (lava follows you)
+  //   Kyogre  : Tidal Wave (lanes with one safe gap)     · Maelstrom (pulls you to its core)
+  //   Rayquaza: Dragon Ascent (chained dives at players)  · Delta Stream (bouncing tornadoes)
+  //   Deoxys  : Psycho Shift (clones + barrier, kill them) · Meteor Mark (a meteor tracks you)
+  // The host decides; custom effects are sent to every client, each one checks its own player.
+  var MECH = { groudon: ['blades', 'magma'], kyogre: ['tidal', 'maelstrom'],
+    rayquaza: ['ascent', 'tornado'], deoxys: ['clones', 'meteor'] };
+  var MECH_SAY = {
+    blades: 'PRECIPICE BLADES! Move between the rock lines!',
+    magma: 'MAGMA SURGE! The lava follows you — keep moving!',
+    tidal: 'TIDAL WAVE! Find the gap in the wave!',
+    maelstrom: 'MAELSTROM! Swim away from the core!',
+    ascent: 'DRAGON ASCENT! Rayquaza dives at you!',
+    tornado: 'DELTA STREAM! Dodge the tornadoes!',
+    clones: 'PSYCHO SHIFT! Destroy the clones before they detonate!',
+    meteor: 'METEOR MARK! Run and spread out!'
+  };
+  var fx = [];                      // local custom effects (every client)
+  var clones = [];                  // host: Deoxys clones alive
+  function arenaR() { return 24 * (PS.World.TS || 32) - 56; }
+  function ctr() { return st.center || { x: 0, y: 0 }; }
+  function clampArena(x, y, pad) {
+    var c = ctr(), dx = x - c.x, dy = y - c.y, d = Math.hypot(dx, dy), R = arenaR() - (pad || 0);
+    if (d <= R) return { x: x, y: y };
+    return { x: c.x + dx / d * R, y: c.y + dy / d * R };
+  }
+  function players() { try { return PS.Game.everyone().filter(function (p) { return p && !p.dead; }); } catch (e) { return []; } }
+  function uids() {
+    if (coopOn()) return (PS.Coop.members || []).map(function (m) { return m.uid; });
+    return ['me'];
+  }
+  function plOf(uid) {
+    if (uid === 'me' || (coopOn() && uid === PS.Coop.me)) return PS.Game.player;
+    try { var m = PS.Coop.mate && PS.Coop.mate(uid); return m && m.pl; } catch (e) { return null; }
+  }
+  // pure damage as a share of max HP (one hit is capped at 50% by the game)
+  function hitMe(pct) {
+    var p = PS.Game.player;
+    if (!p || p.dead || p.remote) return;
+    p.invuln = 0;
+    try { p.hurt(Math.max(1, p.maxHp * pct), null, true); } catch (e) {}
+  }
+  function pushMe(dx, dy) {
+    var p = PS.Game.player;
+    if (!p || p.dead) return;
+    var steps = 6, sx = dx / steps, sy = dy / steps;
+    for (var i = 0; i < steps; i++) {
+      var nx = p.x + sx, ny = p.y + sy;
+      if (PS.World.isFree && !PS.World.isFree(nx, ny, p.r || 12)) break;
+      p.x = nx; p.y = ny;
+    }
+  }
+  function hz(o) {
+    o.pure = true; o.dmg = o.dmg || 1;
+    try { PS.Hazards.add(o); } catch (e) {}
+  }
+  // host → everyone (and itself)
+  function emit(msg) {
+    applyMech(msg);
+    if (coopOn()) { try { PS.Net.broadcast({ k: 'br', t: 'mech', d: msg }); } catch (e) {} }
+  }
+  // mechanic call-outs: the host shows them and sends them to the team
+  function sayAll(t, d) { say(t, d); if (coopOn() && isHost()) { try { PS.Net.broadcast({ k: 'br', t: 'mech', d: { m: 'say', s: t, d: d } }); } catch (e) {} } }
+  function later(t, fn) { (st.sched = st.sched || []).push({ t: t, fn: fn }); }
+  function schedTick(dt) {
+    var q = st.sched; if (!q || !q.length) return;
+    for (var i = q.length - 1; i >= 0; i--) {
+      q[i].t -= dt;
+      if (q[i].t <= 0) { var f = q[i].fn; q.splice(i, 1); try { f(); } catch (e) { console.error('[bossrush mech]', e); } }
+    }
+  }
+
+  function mechTick(dt, e) {
+    schedTick(dt);
+    if (st.mT == null) st.mT = 9;
+    st.mT -= dt;
+    cloneTick(dt, e);
+    if (st.mT > 0 || (e.ai && e.ai.cast) || e.jump) return;
+    var list = MECH[st.boss] || MECH.groudon, m = list[(st.mI || 0) % 2];
+    st.mI = (st.mI || 0) + 1;
+    st.mT = st.desperate ? 11 : st.fury ? 13 : 16;
+    sayAll(MECH_SAY[m], 3);
+    try { PS.Audio.sfx('boss'); e.anim.play('Charge', { speed: 1.2 }); } catch (er) {}
+    START[m](e);
+  }
+  function lockCasts(e, s) { if (e.ai) e.ai.cd = Math.max(e.ai.cd || 0, s); }
+
+  var START = {
+    // --- Groudon: rock lines from the boss, a second wave in the gaps
+    blades: function (e) {
+      var n = st.fury ? 10 : 8, a0 = Math.random() * Math.PI * 2, L = arenaR() * 2 + 200;
+      var waves = st.desperate ? 3 : 2;
+      // each wave is shown only after the previous one lands (readable telegraphs)
+      var ox = e.x, oy = e.y;
+      for (var w = 0; w < waves; w++) (function (w) {
+        later(w * 1.65, function () {
+          if (e.dead) return;
+          var off = (w % 2) * Math.PI / n;
+          // the lines start a bit away from Groudon, so they never overlap (one hit per wave)
+          for (var i = 0; i < n; i++) {
+            var an = a0 + off + i * 2 * Math.PI / n;
+            hz({ kind: 'beam', x: ox + Math.cos(an) * 64, y: oy + Math.sin(an) * 64, angle: an, len: L, w: 34,
+              delay: w ? 1.15 : 1.6, pct: 0.26, type: 'ground', color: '#c8742c' });
+          }
+        });
+      })(w);
+      lockCasts(e, 1.8 + waves * 1.65);
+    },
+    // --- Groudon: eruptions under every player, leaving lava pools
+    magma: function () {
+      var k = st.fury ? 7 : 5;
+      for (var i = 0; i < k; i++) later(i * 0.8, function () {
+        players().forEach(function (p) {
+          var q = clampArena(p.x, p.y, 30);
+          hz({ kind: 'zone', x: q.x, y: q.y, r: 52, delay: 1.0, pct: 0.16, type: 'fire', color: '#ff5a1e' });
+          emit({ m: 'pool', x: Math.round(q.x), y: Math.round(q.y), r: 52, delay: 1.0, life: 7 });
+        });
+      });
+    },
+    // --- Kyogre: lanes of water across the arena, one wide safe gap; then a second wave
+    tidal: function (e) {
+      var waves = st.desperate ? 3 : 2, a = Math.floor(Math.random() * 4) * Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+      for (var w = 0; w < waves; w++) (function (w) {
+        later(w * 2.2, function () { if (!e.dead) tidalWave(a + w * Math.PI / 2, w ? 1.5 : 2.1); });
+      })(w);
+      lockCasts(e, 2.4 + waves * 2.2);
+    },
+    // --- Kyogre: a whirlpool over the team that drags you to its core
+    maelstrom: function () {
+      var ps = players(), x = 0, y = 0;
+      ps.forEach(function (p) { x += p.x; y += p.y; });
+      if (ps.length) { x /= ps.length; y /= ps.length; } else { x = ctr().x; y = ctr().y; }
+      var q = clampArena(x, y, 260);
+      emit({ m: 'whirl', x: Math.round(q.x), y: Math.round(q.y), r: 320, core: 78, life: st.fury ? 8 : 7, pull: st.fury ? 118 : 100 });
+    },
+    // --- Rayquaza: 3-4 chained dives, each one aimed at a player
+    ascent: function (e) {
+      var n = st.fury ? 4 : 3;
+      lockCasts(e, n * 1.35 + 1);
+      var from = { x: e.x, y: e.y };
+      for (var i = 0; i < n; i++) (function (i) {
+        later(i * 1.35, function () {
+          var ps = players(); if (!ps.length || e.dead) return;
+          var tg = ps[i % ps.length], a = Math.atan2(tg.y - from.y, tg.x - from.x);
+          var L = 60, step = 40;
+          while (L < 1300) { var q = { x: from.x + Math.cos(a) * (L + step), y: from.y + Math.sin(a) * (L + step) };
+            var c = clampArena(q.x, q.y, 70); if (c.x !== q.x || c.y !== q.y) break; L += step; }
+          L = Math.max(L, Math.hypot(tg.x - from.x, tg.y - from.y) + 120);
+          var end = clampArena(from.x + Math.cos(a) * L, from.y + Math.sin(a) * L, 70);
+          L = Math.hypot(end.x - from.x, end.y - from.y);
+          hz({ kind: 'beam', x: from.x, y: from.y, angle: a, len: L, w: 84, delay: 1.1, pct: 0.32, type: 'dragon', color: '#45e07a' });
+          var sx = from.x, sy = from.y;
+          later(1.1, function () {
+            if (e.dead) return;
+            e.x = end.x; e.y = end.y;
+            if (e.ai) e.ai.cast = null;
+            try { PS.FX.beam(sx, sy - (PS.LIFT || 0), a, L, 70, '#45e07a', PS.VFX.forType('dragon')); PS.Camera.kick(0.5); PS.Audio.sfx('legend'); } catch (er) {}
+          });
+          from = end;
+        });
+      })(i);
+    },
+    // --- Rayquaza: tornadoes that cross the arena and bounce off its walls
+    tornado: function () {
+      var n = st.fury ? 4 : 3, c = ctr(), R = arenaR(), list = [];
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, d = a + Math.PI + (Math.random() - 0.5) * 0.9, sp = 125 + Math.random() * 35;
+        list.push({ x: Math.round(c.x + Math.cos(a) * R * 0.82), y: Math.round(c.y + Math.sin(a) * R * 0.82),
+          vx: Math.round(Math.cos(d) * sp), vy: Math.round(Math.sin(d) * sp) });
+      }
+      emit({ m: 'tornado', list: list, life: st.fury ? 10 : 9, r: 40 });
+    },
+    // --- Deoxys: 3 clones + a barrier on Deoxys; clones left alive detonate
+    clones: function (e) {
+      killClones();
+      var n = st.desperate ? 4 : 3, T = TUNE[st.boss] || TUNE.deoxys;
+      var hp = Math.round(Math.max(30000, Math.min(2.5e6, (st.rawDps || 120000) * 2.4)));
+      for (var i = 0; i < n; i++) {
+        var a = i * 2 * Math.PI / n + Math.random() * 0.4, q = clampArena(e.x + Math.cos(a) * 240, e.y + Math.sin(a) * 240, 60);
+        var def = { dex: 386, name: 'Deoxys Clone', hp: hp, spd: 105, dmg: Math.round(T.dmg * 0.45), xp: 0,
+          behavior: 'ranged', shotDmg: Math.round(T.shot * 0.55), shotCd: 1.1, range: 300 };
+        var c = new PS.Enemy(def, q.x, q.y, { hp: 1, dmg: 1, spd: 1 }, false);
+        c.brClone = true; c.types = ['psychic']; c.atkType = 'psychic';
+        PS.EnemyMgr.add(c); clones.push(c);
+        try { PS.FX.burst(q.x, q.y - 20, '#c86bff', 16, 140); PS.FX.ring(q.x, q.y, 6, 60, '#c86bff', 0.5, 4); } catch (er) {}
+      }
+      st.cloneT = 14; st.cloneWarn = false;
+      emit({ m: 'shield', on: 1 });
+    },
+    // --- Deoxys: every player gets a meteor that tracks them, plus falling stars
+    meteor: function () {
+      var rounds = st.fury ? 2 : 1;
+      for (var r = 0; r < rounds; r++) later(r * 4.2, function () {
+        emit({ m: 'meteor', uids: uids(), t: 3.2, r: 100 });
+        var c = ctr(), R = arenaR();
+        for (var i = 0; i < 6; i++) {
+          var a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R * 0.9;
+          hz({ kind: 'zone', x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d, r: 62, delay: 1.5 + Math.random() * 1.6,
+            pct: 0.14, type: 'psychic', color: '#c86bff' });
+        }
+      });
+    }
+  };
+  function tidalWave(a, delay) {
+    var c = ctr(), R = arenaR() + 40, lane = 110, n = Math.ceil(2 * R / lane);
+    var gap = 2 + Math.floor(Math.random() * (n - 5));            // 2 adjacent lanes stay safe
+    var dx = Math.cos(a), dy = Math.sin(a), px = -dy, py = dx;
+    for (var i = 0; i < n; i++) {
+      if (i === gap || i === gap + 1) continue;
+      var off = -R + lane * (i + 0.5);
+      hz({ kind: 'beam', x: c.x - dx * (R + 60) + px * off, y: c.y - dy * (R + 60) + py * off, angle: a,
+        len: 2 * R + 120, w: lane, delay: delay, pct: 0.34, type: 'water', color: '#3cb4ff' });
+    }
+  }
+  function killClones() {
+    clones.forEach(function (c) { try { if (!c.dead) { c.hp = 0; c.die && c.die(); } } catch (e) {} });
+    clones = [];
+    if (st.shieldK && st.shieldK < 1) { st.shieldK = 1; emit({ m: 'shield', on: 0 }); }
+  }
+  function cloneTick(dt, e) {
+    if (!clones.length) return;
+    clones = clones.filter(function (c) { return c && !c.dead && PS.EnemyMgr.all().indexOf(c) >= 0; });
+    st.shieldK = clones.length ? 0.3 : 1;
+    if (!clones.length) { emit({ m: 'shield', on: 0 }); sayAll('The clones are gone: the barrier breaks!', 2.4); return; }
+    st.cloneT -= dt;
+    if (st.cloneT < 4 && !st.cloneWarn) { st.cloneWarn = true; sayAll('The clones are about to detonate!', 2.6); }
+    if (st.cloneT <= 0) {
+      // every clone left alive hurts the whole team
+      clones.forEach(function (c) {
+        hz({ kind: 'zone', x: c.x, y: c.y, r: 4000, delay: 0.05, pct: 0.20, type: 'psychic', color: '#c86bff' });
+      });
+      try { PS.Camera.kick(1); } catch (er) {}
+      killClones();
+    }
+  }
+
+  // ------------------------------------------------ custom effects (every client)
+  function applyMech(msg) {
+    if (!msg || !msg.m) return;
+    if (msg.m === 'say') { if (!isHost()) say(msg.s, msg.d); return; }
+    if (msg.m === 'pool') fx.push({ k: 'pool', x: msg.x, y: msg.y, r: msg.r, t: -msg.delay, life: msg.life, tick: 0 });
+    else if (msg.m === 'whirl') fx.push({ k: 'whirl', x: msg.x, y: msg.y, r: msg.r, core: msg.core, t: -1.2, life: msg.life, pull: msg.pull, tick: 0 });
+    else if (msg.m === 'tornado') msg.list.forEach(function (o) {
+      fx.push({ k: 'tornado', x: o.x, y: o.y, vx: o.vx, vy: o.vy, r: msg.r, t: -0.8, life: msg.life, cd: 0 });
+    });
+    else if (msg.m === 'meteor') msg.uids.forEach(function (u) {
+      var pl = plOf(u); if (!pl) return;
+      fx.push({ k: 'meteor', uid: u, x: pl.x, y: pl.y, r: msg.r, t: 0, life: msg.t });
+    });
+    else if (msg.m === 'shield') st.shieldOn = !!msg.on;
+    if (fx.length > 60) fx.splice(0, fx.length - 60);
+  }
+  var poolCd = 0;
+  function fxTick(dt) {
+    var p = PS.Game.player, c = ctr(), R = arenaR();
+    poolCd -= dt;
+    for (var i = fx.length - 1; i >= 0; i--) {
+      var f = fx[i];
+      f.t += dt;
+      if (f.k === 'pool') {
+        if (f.t >= 0 && p && !p.dead && Math.hypot(p.x - f.x, (p.y - f.y) / 0.75) < f.r + 4 && poolCd <= 0) {
+          poolCd = 0.5; hitMe(0.07);                              // overlapping pools do not stack
+        }
+      } else if (f.k === 'whirl') {
+        if (f.t >= 0 && p && !p.dead) {
+          var dx = f.x - p.x, dy = f.y - p.y, d = Math.hypot(dx, dy);
+          if (d < f.r && d > 4) { var s = f.pull * (0.55 + 0.45 * (1 - d / f.r)) * dt; pushMe(dx / d * s, dy / d * s); }
+          if (d < f.core) { f.tick -= dt; if (f.tick <= 0) { f.tick = 0.4; hitMe(0.10); } }
+        }
+      } else if (f.k === 'tornado') {
+        if (f.t >= 0) {
+          f.x += f.vx * dt; f.y += f.vy * dt;
+          var ox = f.x - c.x, oy = f.y - c.y, od = Math.hypot(ox, oy);
+          if (od > R - f.r) {                                   // bounce off the arena wall
+            var nx = ox / od, ny = oy / od, dot = f.vx * nx + f.vy * ny;
+            if (dot > 0) { f.vx -= 2 * dot * nx; f.vy -= 2 * dot * ny; }
+            f.x = c.x + nx * (R - f.r); f.y = c.y + ny * (R - f.r);
+          }
+          f.cd -= dt;
+          if (p && !p.dead && f.cd <= 0) {
+            var tx = p.x - f.x, ty = p.y - f.y, td = Math.hypot(tx, ty);
+            if (td < f.r + (p.r || 12)) { f.cd = 0.9; hitMe(0.16); pushMe(tx / (td || 1) * 150, ty / (td || 1) * 150); }
+          }
+        }
+      } else if (f.k === 'meteor') {
+        var pl = plOf(f.uid);
+        if (pl && !pl.dead) { var k = Math.min(1, dt * 2.4); f.x += (pl.x - f.x) * k; f.y += (pl.y - f.y) * k; }
+        if (f.t >= f.life && !f.done) {
+          f.done = true;
+          try { PS.FX.ring(f.x, f.y, 8, f.r, '#e08bff', 0.45, 6); PS.FX.burst(f.x, f.y - 10, '#c86bff', 26, 220);
+            PS.FX.beam(f.x, f.y, -Math.PI / 2, 420, f.r * 0.9, '#c86bff', PS.VFX.forType('psychic')); PS.Camera.kick(0.6); PS.Audio.sfx('judge'); } catch (er) {}
+          if (p && !p.dead && Math.hypot(p.x - f.x, (p.y - f.y) / 0.75) < f.r + (p.r || 12) * 0.6) hitMe(0.40);
+        }
+      }
+      if (f.t >= (f.k === 'meteor' ? f.life + 0.2 : f.life)) fx.splice(i, 1);
+    }
+  }
+  function fxDrawables() {
+    if (!fx.length && !(st.shieldOn && st.e)) return [];
+    var out = [], now = performance.now() / 1000;
+    fx.forEach(function (f) {
+      if (f.k === 'pool') out.push({ y: -1e9, draw: function (ctx) {
+        ctx.save();
+        var on = f.t >= 0, fade = Math.min(1, (f.life - f.t) / 0.8);
+        ctx.globalAlpha = on ? 0.72 * fade : 0.25;
+        var g = ctx.createRadialGradient(f.x, f.y, 4, f.x, f.y, f.r);
+        g.addColorStop(0, '#ffd23f'); g.addColorStop(0.45, '#ff6a1e'); g.addColorStop(1, 'rgba(140,20,0,0.15)');
+        ctx.fillStyle = on ? g : '#ff3030';
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r, f.r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+        if (on) { ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2;
+          var b = (((now * 1.7 + f.x) % 1) + 1) % 1; ctx.beginPath(); ctx.ellipse(f.x + Math.sin(f.x + now) * 10, f.y, 6 + 10 * b, (6 + 10 * b) * 0.75, 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.restore();
+      } });
+      else if (f.k === 'whirl') out.push({ y: -1e9, draw: function (ctx) {
+        ctx.save();
+        var on = f.t >= 0, fade = Math.min(1, (f.life - f.t) / 0.8, on ? 1 : 0.4 + 0.6 * (1 + f.t / 1.2));
+        ctx.translate(f.x, f.y); ctx.scale(1, 0.75);
+        ctx.globalAlpha = 0.28 * fade; ctx.fillStyle = '#1a5fae';
+        ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 4; ctx.strokeStyle = '#9fe0ff';
+        for (var j = 0; j < 5; j++) {
+          ctx.globalAlpha = 0.55 * fade;
+          var rr = f.r * (0.25 + 0.17 * j), a0 = -now * (2.4 - j * 0.3) + j;
+          ctx.beginPath(); ctx.arc(0, 0, rr, a0, a0 + 2.2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(0, 0, rr, a0 + Math.PI, a0 + Math.PI + 2.2); ctx.stroke();
+        }
+        ctx.globalAlpha = 0.55 * fade; ctx.fillStyle = '#0a2850';
+        ctx.beginPath(); ctx.arc(0, 0, f.core, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = '#ff4a4a'; ctx.setLineDash([6, 5]); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, f.core, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      } });
+      else if (f.k === 'tornado') out.push({ y: f.y + 1, draw: function (ctx) {
+        ctx.save();
+        var grow = f.t < 0 ? 0.35 + 0.65 * (1 + f.t / 0.8) : Math.min(1, (f.life - f.t) / 0.6);
+        ctx.translate(f.x, f.y);
+        for (var j = 0; j < 7; j++) {
+          var h = j * 15, w = f.r * (0.45 + j * 0.13) * grow, sway = Math.sin(now * 6 + j * 0.9) * 5;
+          ctx.globalAlpha = (0.55 - j * 0.04) * (f.t < 0 ? 0.5 : 1);
+          ctx.strokeStyle = j % 2 ? '#e8fff2' : '#8ff0b8'; ctx.lineWidth = 4;
+          var a0 = now * 9 + j;
+          ctx.beginPath(); ctx.ellipse(sway, -h, w, w * 0.32, 0, a0, a0 + 4.6); ctx.stroke();
+        }
+        ctx.restore();
+      } });
+      else if (f.k === 'meteor') out.push({ y: -1e9 + 1, draw: function (ctx) {
+        ctx.save();
+        var k = Math.min(1, f.t / f.life), blink = k > 0.75 && Math.sin(now * 40) > 0;
+        ctx.translate(f.x, f.y); ctx.scale(1, 0.75);
+        ctx.globalAlpha = 0.18 + 0.12 * k; ctx.fillStyle = '#c86bff';
+        ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(0, 0, f.r * k, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = blink ? 1 : 0.75; ctx.strokeStyle = '#f2c8ff'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
+        ctx.beginPath(); ctx.arc(0, 0, f.r, -now * 2, -now * 2 + Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-f.r * 0.3, 0); ctx.lineTo(f.r * 0.3, 0); ctx.moveTo(0, -f.r * 0.3); ctx.lineTo(0, f.r * 0.3); ctx.stroke();
+        ctx.restore();
+        // the falling meteor
+        var hgt = (1 - k) * 380;
+        ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffe0ff';
+        ctx.beginPath(); ctx.arc(f.x + hgt * 0.35, f.y - hgt - 20, 9 + 9 * k, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.5; ctx.fillStyle = '#c86bff';
+        ctx.beginPath(); ctx.arc(f.x + hgt * 0.35 + 10, f.y - hgt - 34, 14 + 8 * k, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } });
+    });
+    var e = st.e;
+    if (st.shieldOn && e && !e.dead) out.push({ y: e.y + 2, draw: function (ctx) {
+      ctx.save();
+      var r = (e.r || 30) * 2.2, h = e.bodyH || 70;
+      ctx.translate(e.x, e.y - h * 0.45);
+      ctx.globalAlpha = 0.18 + 0.06 * Math.sin(now * 5); ctx.fillStyle = '#c86bff';
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.8; ctx.strokeStyle = '#f2c8ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r * 1.05, 0, now, now + Math.PI * 1.4); ctx.stroke();
+      ctx.restore();
+    } });
+    return out;
+  }
+
   // ---------------------------------------------------------------- leaderboard
   // One board per boss (Solo / Group), fastest kill wins: t = 100000 - seconds.
   var RANK_ID = { groudon: 'bg', kyogre: 'bk', rayquaza: 'br', deoxys: 'bd' };
@@ -392,6 +777,7 @@
     try { var Wc = PS.Weather.current; if (st.weather && (!Wc || Wc.kind !== st.weather || Wc.left < 900)) PS.Weather.force(st.weather, 999); } catch (er) {}
     if (e.dead) {
       if (!st.won) {
+        try { killClones(); st.sched = []; } catch (er) {}
         st.won = true; st.winT = 0;
         markBeaten(st.boss);
         try { submitRank(); } catch (er) { console.warn('[bossrush ranking]', er); }
@@ -423,6 +809,7 @@
       e.castK *= 1.15;
       say(boss().say.last, 3.4);
     }
+    try { mechTick(dt, e); } catch (er) { console.error('[bossrush mech]', er); }
     adapt(dt);
   }
 
@@ -489,7 +876,10 @@
       if (!isHost() && st.phase === 'prep') { st.phase = 'count'; st.countT = 10; }
     } else if (msg.t === 'fight') {
       if (!isHost() && st.phase !== 'fight') { st.phase = 'fight'; st.fightT = 0; }
+    } else if (msg.t === 'mech') {
+      if (!isHost()) { try { applyMech(msg.d); } catch (e) { console.error('[bossrush mech]', e); } }
     } else if (msg.t === 'won') {
+      fx = []; st.shieldOn = false;
       markBeaten(msg.boss || 'groudon');
       if (!isHost()) st.won = true;
     }
@@ -551,6 +941,9 @@
     var u = ensureUi(), now = performance.now();
     var fdt = Math.min(0.1, (now - (lastUi || now)) / 1000); lastUi = now;
     var on = isBR() && inRun();
+    var gs = PS.Game.state;
+    if (on && gs === 'playing' && fx.length) { try { fxTick(fdt); } catch (e) { console.error('[bossrush fx]', e); } }
+    if (!on && fx.length) { fx = []; st.shieldOn = false; }
     if (!on) { u.prep.style.display = 'none'; u.count.style.display = 'none'; closeItems(); closePoints(); closeMoves(); return; }
     // every client prepares its own Pokémon once the arena is ready
     if (st.setup && !st.granted && (PS.Game.state === 'playing' || PS.Game.state === 'held')) grantPrep();
@@ -1043,10 +1436,22 @@
         return r;
       };
     });
+    hookAfter(ns, 'Training', function (T) {
+      if (!T || T.__brFx || typeof T.drawables !== 'function') return;
+      T.__brFx = true;
+      var drw = T.drawables;
+      T.drawables = function () {
+        var list = drw.apply(this, arguments) || [];
+        if (!isBR() || (!fx.length && !st.shieldOn)) return list;
+        var d = []; try { d = fxDrawables(); } catch (e) { console.error('[bossrush fx]', e); }
+        return d.length ? list.concat(d) : list;
+      };
+    });
     hookAfter(ns, 'Net', function (N) { if (N && N.on && !N.__br) { N.__br = true; N.on(onNet); } });
     requestAnimationFrame(uiLoop);
     window.__bossrush = { state: function () { return st; }, BOSSES: BOSSES, TUNE: TUNE, open: openSel,
-      start: startBoss, prog: prog };
+      start: startBoss, prog: prog, mech: function (m) { var e = st.e; if (e && START[m]) { say(MECH_SAY[m], 3); START[m](e); } },
+      fx: function () { return fx; } };
   }
 
   var d = Object.getOwnPropertyDescriptor(window, '__PS');

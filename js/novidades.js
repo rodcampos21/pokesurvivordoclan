@@ -33,6 +33,8 @@
          'Before the fight: spend 50 stat points, pick 4 moves (maxed and evolved) and 1 item.'],
         ['Equilibrado para 1 a 4 jugadores; en grupo la lucha empieza cuando todos están listos.',
          'Balanced for 1 to 4 players; in co-op the fight starts once everyone is ready.'],
+        ['Cada jefe tiene 2 mecánicas propias (Cuchillas del Precipicio, Oleaje, Ascenso Draco, clones de Deoxys…): todas avisan antes y se pueden esquivar.',
+         'Every boss has 2 signature mechanics (Precipice Blades, Tidal Wave, Dragon Ascent, Deoxys clones…): all telegraphed and dodgeable.'],
         ['Ranking propio para cada jefe (solo y en grupo): gana quien lo derrote más rápido.',
          'Its own leaderboard for each boss (solo and group): the fastest kill wins.'],
         ['§Otros', '§Other'],
