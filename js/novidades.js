@@ -20,8 +20,10 @@
       ],
       'new': [
         ['§Maestría', '§Mastery'],
-        ['10 rangos por Pokémon: Rookie (5M de daño) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (100M).',
-         '10 ranks per Pokémon: Rookie (5M damage) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (100M).'],
+        ['10 rangos por Pokémon: Rookie (25M de daño) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (3.5B).',
+         '10 ranks per Pokémon: Rookie (25M damage) → Challenger → Veteran → Gym Leader → Frontier Brain → Elite Four → Champion → Pokémon Master → Legendary → Monarch (3.5B).'],
+        ['Cada Pokémon suma como máximo 150M de daño de maestría por día: la maestría se conquista con el tiempo.',
+         'Each Pokémon counts at most 150M mastery damage per day: masteries are earned over time.'],
         ['Al llegar a un hito la maestría evoluciona; equípala en Mejoras y su insignia aparece sobre tu Pokémon (tus aliados también la ven).',
          'Reaching a milestone evolves your mastery; equip it in Upgrades and its badge floats over your Pokémon (teammates see it too).'],
         ['La barra de progreso en Mejoras muestra cuánto falta para el siguiente rango. El daño en Boss Rush no cuenta.',

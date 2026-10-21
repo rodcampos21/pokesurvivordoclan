@@ -1,8 +1,10 @@
 /* =====================================================================
  * MASTERY — one per Pokémon, earned by the total damage it has dealt
  * ---------------------------------------------------------------------
- *  Rookie 5M · Challenger 10M · Veteran 15M · Gym Leader 25M · Frontier Brain 35M
- *  Elite Four 45M · Champion 60M · Pokémon Master 75M · Legendary 90M · Monarch 100M
+ *  Rookie 25M · Challenger 75M · Veteran 150M · Gym Leader 300M · Frontier Brain 500M
+ *  Elite Four 800M · Champion 1.2B · Pokémon Master 1.8B · Legendary 2.6B · Monarch 3.5B
+ *  At most DAILY_CAP damage per Pokémon counts each day (local midnight reset), so a
+ *  mastery is earned over weeks: Monarch takes 24+ days of maxed play with one Pokémon.
  *
  *  · Damage counts in every mode except the Boss Rush (and not in training or with the dev menu on).
  *  · Reaching a milestone evolves the mastery: only the highest one is used.
@@ -14,18 +16,19 @@
   'use strict';
 
   var TIERS = [
-    { id: 'rookie',     name: 'Rookie',         need: 5e6 },
-    { id: 'challenger', name: 'Challenger',     need: 10e6 },
-    { id: 'veteran',    name: 'Veteran',        need: 15e6 },
-    { id: 'gym',        name: 'Gym Leader',     need: 25e6 },
-    { id: 'frontier',   name: 'Frontier Brain', need: 35e6 },
-    { id: 'elite',      name: 'Elite Four',     need: 45e6 },
-    { id: 'champion',   name: 'Champion',       need: 60e6 },
-    { id: 'master',     name: 'Pokémon Master', need: 75e6 },
-    { id: 'legendary',  name: 'Legendary',      need: 90e6 },
-    { id: 'monarch',    name: 'Monarch',        need: 100e6 }
+    { id: 'rookie',     name: 'Rookie',         need: 25e6 },
+    { id: 'challenger', name: 'Challenger',     need: 75e6 },
+    { id: 'veteran',    name: 'Veteran',        need: 150e6 },
+    { id: 'gym',        name: 'Gym Leader',     need: 300e6 },
+    { id: 'frontier',   name: 'Frontier Brain', need: 500e6 },
+    { id: 'elite',      name: 'Elite Four',     need: 800e6 },
+    { id: 'champion',   name: 'Champion',       need: 1.2e9 },
+    { id: 'master',     name: 'Pokémon Master', need: 1.8e9 },
+    { id: 'legendary',  name: 'Legendary',      need: 2.6e9 },
+    { id: 'monarch',    name: 'Monarch',        need: 3.5e9 }
   ];
   var LS = 'ps.mastery';
+  var DAILY_CAP = 150e6;         // damage per Pokémon per day that counts toward its mastery
   var BADGE_W = 46, BADGE_H = 40; // max badge size over the Pokémon (world px)
   var PS = null;
 
@@ -47,6 +50,9 @@
       Object.keys(L.d).forEach(function (k) { if ((L.d[k] || 0) > (m.d[k] || 0)) m.d[k] = L.d[k]; });
       m.eq = m.eq || {};
       Object.keys(L.eq || {}).forEach(function (k) { if (!(k in m.eq)) m.eq[k] = L.eq[k]; });
+      if (L.day && (!m.day || m.day.date < L.day.date)) m.day = L.day;
+      else if (L.day && m.day && m.day.date === L.day.date)
+        Object.keys(L.day.got || {}).forEach(function (k) { if ((L.day.got[k] || 0) > (m.day.got[k] || 0)) m.day.got[k] = L.day.got[k]; });
       Object.defineProperty(m, '__merged', { value: true, enumerable: false });
     }
     return m;
@@ -54,13 +60,21 @@
   var dirty = false, lastFlush = 0;
   function persist(force) {
     var m = data();
-    try { localStorage.setItem(LS, JSON.stringify({ d: m.d, eq: m.eq })); } catch (e) {}
+    try { localStorage.setItem(LS, JSON.stringify({ d: m.d, eq: m.eq, day: m.day })); } catch (e) {}
     var now = performance.now();
     if (!force && now - lastFlush < 20000) { dirty = true; return; }
     lastFlush = now; dirty = false;
     try { if (PS.DB && PS.DB.save) { PS.DB.save.mastery = m; if (PS.DB.flush) PS.DB.flush(); } } catch (e) {}
   }
 
+  function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function dayBucket() {
+    var m = data(), t = today();
+    if (!m.day || m.day.date !== t) m.day = { date: t, got: {} };
+    if (!m.day.got) m.day.got = {};
+    return m.day;
+  }
+  function todayOf(dex) { return +dayBucket().got[String(dex)] || 0; }
   function dmgOf(dex) { return +data().d[String(dex)] || 0; }
   function tierIdx(dmg) { var i = -1; for (var k = 0; k < TIERS.length; k++) if (dmg >= TIERS[k].need) i = k; return i; }
   function tierOf(dex) { var i = tierIdx(dmgOf(dex)); return i >= 0 ? TIERS[i] : null; }
@@ -68,6 +82,7 @@
   function setEquip(dex, on) { data().eq[String(dex)] = !!on; persist(true); sendNet(); }
 
   function fmt(n) {
+    if (n >= 1e9) return (Math.floor(n / 1e7) / 100).toFixed(2).replace(/\.?0+$/, '') + 'B';
     if (n >= 1e6) return (Math.floor(n / 1e4) / 100).toFixed(2).replace(/\.?0+$/, '') + 'M';
     if (n >= 1e3) return Math.floor(n / 1e3) + 'K';
     return String(Math.floor(n));
@@ -87,7 +102,17 @@
   function addDmg(n) {
     var p = player(), dex = myDex(p);
     if (!dex || !(n > 0) || !isFinite(n)) return;
-    var m = data(), k = String(dex), before = +m.d[k] || 0, after = before + n;
+    var m = data(), k = String(dex), day = dayBucket(), got = +day.got[k] || 0;
+    var room = DAILY_CAP - got;
+    if (room <= 0) {                                       // today's mastery damage is full for this Pokémon
+      if (!day.capSaid || day.capSaid !== k) {
+        day.capSaid = k;
+        try { PS.Spawner.say('Mastery: daily limit reached for this Pokémon (resets at midnight)', 3.2, true); } catch (e) {}
+      }
+      return;
+    }
+    n = Math.min(n, room); day.got[k] = got + n;
+    var before = +m.d[k] || 0, after = before + n;
     m.d[k] = after;
     var a = tierIdx(before), b = tierIdx(after);
     if (b > a) {
@@ -164,6 +189,7 @@
       '#mast-panel .mp-bar{position:relative;height:14px;margin:7px 0 4px;border-radius:7px;background:#0d1530;border:1px solid #4a6ac0;overflow:hidden}' +
       '#mast-panel .mp-bar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#ffb020,#ffe066);border-radius:7px}' +
       '#mast-panel .mp-txt{font-size:12px;color:#dfe8ff}' +
+      '#mast-panel .mp-day{font-size:11px;color:#9fb2d8;margin-top:2px}' +
       '#mast-panel .mp-tiers{display:flex;gap:4px;margin-top:7px;flex-wrap:wrap}' +
       '#mast-panel .mp-tiers span{width:40px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;' +
       'background:rgba(0,0,0,.25);border:1px solid rgba(160,190,255,.18)}' +
@@ -184,7 +210,7 @@
     panel.id = 'mast-panel'; panel.setAttribute('translate', 'no');
     panel.innerHTML = '<div class="mp-badge"></div><div class="mp-main"><div class="mp-top"><h4>MASTERY</h4><small class="mp-name"></small>' +
       '<button class="btn small gold mp-eq" type="button"></button></div><div class="mp-bar"><i></i></div>' +
-      '<div class="mp-txt"></div><div class="mp-tiers"></div></div>';
+      '<div class="mp-txt"></div><div class="mp-day"></div><div class="mp-tiers"></div></div>';
     head.parentNode.insertBefore(panel, head.nextSibling);
     panel.querySelector('.mp-eq').onclick = function () {
       var dex = curDex(); if (!dex || !tierOf(dex)) return;
@@ -199,11 +225,11 @@
     var P = ensurePanel(); if (!P) return;
     var dex = curDex(), dmg = dmgOf(dex), i = tierIdx(dmg), T = i >= 0 ? TIERS[i] : null, N = TIERS[i + 1] || null;
     var eq = equipped(dex);
-    var key = dex + '|' + Math.floor(dmg) + '|' + eq;
+    var key = dex + '|' + Math.floor(dmg) + '|' + eq + '|' + today();
     if (!force && key === lastKey) return;
     lastKey = key;
     P.querySelector('.mp-badge').innerHTML = T ? '<img src="assets/ui/mastery/' + T.id + '.webp?v=4" alt="' + T.name + '">'
-      : '<div class="none">No mastery yet<br>Deal 5M damage<br>to unlock Rookie</div>';
+      : '<div class="none">No mastery yet<br>Deal 25M damage<br>to unlock Rookie</div>';
     P.querySelector('.mp-name').textContent = T ? T.name + (eq ? ' · equipped' : '') : 'Locked';
     var b = P.querySelector('.mp-eq');
     b.style.display = T ? '' : 'none';
@@ -214,6 +240,9 @@
     P.querySelector('.mp-txt').textContent = N
       ? 'Damage dealt: ' + fmt(dmg) + ' / ' + fmt(N.need) + ' → ' + N.name + ' (' + fmt(N.need - dmg) + ' to go)'
       : 'Damage dealt: ' + fmt(dmg) + ' · Highest mastery reached!';
+    var td = todayOf(dex);
+    P.querySelector('.mp-day').textContent = 'Today: ' + fmt(td) + ' / ' + fmt(DAILY_CAP) + ' counted' +
+      (td >= DAILY_CAP ? ' · daily limit reached, resets at midnight' : ' (daily limit per Pokémon)');
     P.querySelector('.mp-tiers').innerHTML = TIERS.map(function (t, k) {
       var c = k === i ? 'cur' : k < i ? 'past' : 'lock';
       return '<span class="' + c + '" title="' + t.name + ' · ' + fmt(t.need) + ' damage' + (k < i ? ' (evolved)' : '') + '">' +
