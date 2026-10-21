@@ -447,32 +447,32 @@
   var START = {
     // --- Groudon: rock lines from the boss, a second wave in the gaps
     blades: function (e) {
-      var n = st.fury ? 10 : 8, a0 = Math.random() * Math.PI * 2, L = arenaR() * 2 + 200;
-      var waves = st.desperate ? 3 : 2;
+      var n = st.fury ? 12 : 10, a0 = Math.random() * Math.PI * 2, L = arenaR() * 2 + 200;
+      var waves = st.desperate ? 4 : 3;
       // each wave is shown only after the previous one lands (readable telegraphs)
       var ox = e.x, oy = e.y;
       for (var w = 0; w < waves; w++) (function (w) {
-        later(w * 1.65, function () {
+        later(w * 1.4, function () {
           if (e.dead) return;
           var off = (w % 2) * Math.PI / n;
           // the lines start a bit away from Groudon, so they never overlap (one hit per wave)
           for (var i = 0; i < n; i++) {
             var an = a0 + off + i * 2 * Math.PI / n;
-            hz({ kind: 'beam', x: ox + Math.cos(an) * 64, y: oy + Math.sin(an) * 64, angle: an, len: L, w: 34,
-              delay: w ? 1.15 : 1.6, pct: 0.26, type: 'ground', color: '#c8742c' });
+            hz({ kind: 'beam', x: ox + Math.cos(an) * 64, y: oy + Math.sin(an) * 64, angle: an, len: L, w: 40,
+              delay: w ? 0.95 : 1.35, pct: 0.30, type: 'ground', color: '#c8742c' });
           }
         });
       })(w);
-      lockCasts(e, 1.8 + waves * 1.65);
+      lockCasts(e, 1.6 + waves * 1.4);
     },
     // --- Groudon: eruptions under every player, leaving lava pools
     magma: function () {
-      var k = st.fury ? 7 : 5;
-      for (var i = 0; i < k; i++) later(i * 0.8, function () {
+      var k = st.fury ? 9 : 7;
+      for (var i = 0; i < k; i++) later(i * 0.65, function () {
         players().forEach(function (p) {
           var q = clampArena(p.x, p.y, 30);
-          hz({ kind: 'zone', x: q.x, y: q.y, r: 52, delay: 1.0, pct: 0.16, type: 'fire', color: '#ff5a1e' });
-          emit({ m: 'pool', x: Math.round(q.x), y: Math.round(q.y), r: 52, delay: 1.0, life: 7 });
+          hz({ kind: 'zone', x: q.x, y: q.y, r: 60, delay: 0.85, pct: 0.18, type: 'fire', color: '#ff5a1e' });
+          emit({ m: 'pool', x: Math.round(q.x), y: Math.round(q.y), r: 60, delay: 0.85, life: 9 });
         });
       });
     },
@@ -494,11 +494,11 @@
     },
     // --- Rayquaza: 3-4 chained dives, each one aimed at a player
     ascent: function (e) {
-      var n = st.fury ? 4 : 3;
-      lockCasts(e, n * 1.35 + 1);
+      var n = st.fury ? 5 : 4;
+      lockCasts(e, n * 1.1 + 1);
       var from = { x: e.x, y: e.y };
       for (var i = 0; i < n; i++) (function (i) {
-        later(i * 1.35, function () {
+        later(i * 1.1, function () {
           var ps = players(); if (!ps.length || e.dead) return;
           var tg = ps[i % ps.length], a = Math.atan2(tg.y - from.y, tg.x - from.x);
           var L = 60, step = 40;
@@ -507,9 +507,9 @@
           L = Math.max(L, Math.hypot(tg.x - from.x, tg.y - from.y) + 120);
           var end = clampArena(from.x + Math.cos(a) * L, from.y + Math.sin(a) * L, 70);
           L = Math.hypot(end.x - from.x, end.y - from.y);
-          hz({ kind: 'beam', x: from.x, y: from.y, angle: a, len: L, w: 84, delay: 1.1, pct: 0.32, type: 'dragon', color: '#45e07a' });
+          hz({ kind: 'beam', x: from.x, y: from.y, angle: a, len: L, w: 96, delay: 0.9, pct: 0.36, type: 'dragon', color: '#45e07a' });
           var sx = from.x, sy = from.y;
-          later(1.1, function () {
+          later(0.9, function () {
             if (e.dead) return;
             e.x = end.x; e.y = end.y;
             if (e.ai) e.ai.cast = null;
@@ -521,19 +521,19 @@
     },
     // --- Rayquaza: tornadoes that cross the arena and bounce off its walls
     tornado: function () {
-      var n = st.fury ? 4 : 3, c = ctr(), R = arenaR(), list = [];
+      var n = st.fury ? 6 : 5, c = ctr(), R = arenaR(), list = [];
       for (var i = 0; i < n; i++) {
-        var a = Math.random() * Math.PI * 2, d = a + Math.PI + (Math.random() - 0.5) * 0.9, sp = 125 + Math.random() * 35;
+        var a = Math.random() * Math.PI * 2, d = a + Math.PI + (Math.random() - 0.5) * 0.9, sp = 150 + Math.random() * 45;
         list.push({ x: Math.round(c.x + Math.cos(a) * R * 0.82), y: Math.round(c.y + Math.sin(a) * R * 0.82),
           vx: Math.round(Math.cos(d) * sp), vy: Math.round(Math.sin(d) * sp) });
       }
-      emit({ m: 'tornado', list: list, life: st.fury ? 10 : 9, r: 40 });
+      emit({ m: 'tornado', list: list, life: st.fury ? 12 : 11, r: 46 });
     },
     // --- Deoxys: 3 clones + a barrier on Deoxys; clones left alive detonate
     clones: function (e) {
       killClones();
-      var n = st.desperate ? 4 : 3, T = TUNE[st.boss] || TUNE.deoxys;
-      var hp = Math.round(Math.max(30000, Math.min(2.5e6, (st.rawDps || 120000) * 2.4)));
+      var n = st.desperate ? 5 : 4, T = TUNE[st.boss] || TUNE.deoxys;
+      var hp = Math.round(Math.max(30000, Math.min(2.5e6, (st.rawDps || 120000) * 3.0)));
       for (var i = 0; i < n; i++) {
         var a = i * 2 * Math.PI / n + Math.random() * 0.4, q = clampArena(e.x + Math.cos(a) * 240, e.y + Math.sin(a) * 240, 60);
         var def = { dex: 386, name: 'Deoxys Clone', hp: hp, spd: 105, dmg: Math.round(T.dmg * 0.45), xp: 0,
@@ -543,19 +543,19 @@
         PS.EnemyMgr.add(c); clones.push(c);
         try { PS.FX.burst(q.x, q.y - 20, '#c86bff', 16, 140); PS.FX.ring(q.x, q.y, 6, 60, '#c86bff', 0.5, 4); } catch (er) {}
       }
-      st.cloneT = 14; st.cloneWarn = false;
+      st.cloneT = 12; st.cloneWarn = false;
       emit({ m: 'shield', on: 1 });
     },
     // --- Deoxys: every player gets a meteor that tracks them, plus falling stars
     meteor: function () {
-      var rounds = st.fury ? 2 : 1;
-      for (var r = 0; r < rounds; r++) later(r * 4.2, function () {
-        emit({ m: 'meteor', uids: uids(), t: 3.2, r: 100 });
+      var rounds = st.fury ? 3 : 2;
+      for (var r = 0; r < rounds; r++) later(r * 3.6, function () {
+        emit({ m: 'meteor', uids: uids(), t: 2.8, r: 112 });
         var c = ctr(), R = arenaR();
-        for (var i = 0; i < 6; i++) {
+        for (var i = 0; i < 10; i++) {
           var a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R * 0.9;
           hz({ kind: 'zone', x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d, r: 62, delay: 1.5 + Math.random() * 1.6,
-            pct: 0.14, type: 'psychic', color: '#c86bff' });
+            pct: 0.18, type: 'psychic', color: '#c86bff' });
         }
       });
     }
@@ -579,14 +579,14 @@
   function cloneTick(dt, e) {
     if (!clones.length) return;
     clones = clones.filter(function (c) { return c && !c.dead && PS.EnemyMgr.all().indexOf(c) >= 0; });
-    st.shieldK = clones.length ? 0.3 : 1;
+    st.shieldK = clones.length ? 0.2 : 1;
     if (!clones.length) { emit({ m: 'shield', on: 0 }); sayAll('The clones are gone: the barrier breaks!', 2.4); return; }
     st.cloneT -= dt;
     if (st.cloneT < 4 && !st.cloneWarn) { st.cloneWarn = true; sayAll('The clones are about to detonate!', 2.6); }
     if (st.cloneT <= 0) {
       // every clone left alive hurts the whole team
       clones.forEach(function (c) {
-        hz({ kind: 'zone', x: c.x, y: c.y, r: 4000, delay: 0.05, pct: 0.20, type: 'psychic', color: '#c86bff' });
+        hz({ kind: 'zone', x: c.x, y: c.y, r: 4000, delay: 0.05, pct: 0.24, type: 'psychic', color: '#c86bff' });
       });
       try { PS.Camera.kick(1); } catch (er) {}
       killClones();
@@ -618,7 +618,7 @@
       f.t += dt;
       if (f.k === 'pool') {
         if (f.t >= 0 && p && !p.dead && Math.hypot(p.x - f.x, (p.y - f.y) / 0.75) < f.r + 4 && poolCd <= 0) {
-          poolCd = 0.5; hitMe(0.07);                              // overlapping pools do not stack
+          poolCd = 0.5; hitMe(0.09);                              // overlapping pools do not stack
         }
       } else if (f.k === 'whirl') {
         if (f.t >= 0 && p && !p.dead) {
@@ -638,17 +638,17 @@
           f.cd -= dt;
           if (p && !p.dead && f.cd <= 0) {
             var tx = p.x - f.x, ty = p.y - f.y, td = Math.hypot(tx, ty);
-            if (td < f.r + (p.r || 12)) { f.cd = 0.9; hitMe(0.16); pushMe(tx / (td || 1) * 150, ty / (td || 1) * 150); }
+            if (td < f.r + (p.r || 12)) { f.cd = 0.9; hitMe(0.20); pushMe(tx / (td || 1) * 150, ty / (td || 1) * 150); }
           }
         }
       } else if (f.k === 'meteor') {
         var pl = plOf(f.uid);
-        if (pl && !pl.dead) { var k = Math.min(1, dt * 2.4); f.x += (pl.x - f.x) * k; f.y += (pl.y - f.y) * k; }
+        if (pl && !pl.dead) { var k = Math.min(1, dt * 3.2); f.x += (pl.x - f.x) * k; f.y += (pl.y - f.y) * k; }
         if (f.t >= f.life && !f.done) {
           f.done = true;
           try { PS.FX.ring(f.x, f.y, 8, f.r, '#e08bff', 0.45, 6); PS.FX.burst(f.x, f.y - 10, '#c86bff', 26, 220);
             PS.FX.beam(f.x, f.y, -Math.PI / 2, 420, f.r * 0.9, '#c86bff', PS.VFX.forType('psychic')); PS.Camera.kick(0.6); PS.Audio.sfx('judge'); } catch (er) {}
-          if (p && !p.dead && Math.hypot(p.x - f.x, (p.y - f.y) / 0.75) < f.r + (p.r || 12) * 0.6) hitMe(0.40);
+          if (p && !p.dead && Math.hypot(p.x - f.x, (p.y - f.y) / 0.75) < f.r + (p.r || 12) * 0.6) hitMe(0.45);
         }
       }
       if (f.t >= (f.k === 'meteor' ? f.life + 0.2 : f.life)) fx.splice(i, 1);
