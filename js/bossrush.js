@@ -90,10 +90,11 @@
   //   farMax: longest time it stays away from you (s)
   var TUNE = {
     // 20-10-2026 buff (players found it too easy): ~+45% damage, faster attacks and movement, longer fights
-    groudon:  { hp: 5000000, dmg: 215, shot: 115, spd: 102, castK: 2.10, armor: 0.35, target: 185, farMax: 1.0 },
-    kyogre:   { hp: 6000000, dmg: 265, shot: 145, spd: 106, castK: 2.35, armor: 0.40, target: 200, farMax: 1.3 },
-    rayquaza: { hp: 7000000, dmg: 315, shot: 175, spd: 130, castK: 2.60, armor: 0.45, target: 215, farMax: 0.8 },
-    deoxys:   { hp: 8000000, dmg: 375, shot: 210, spd: 145, castK: 2.95, armor: 0.50, target: 230, farMax: 0.7 }
+    // + HP ×1.35 and defense ×1.25; the adaptive fight length grows by the same 1.35 × 1.25
+    groudon:  { hp: 6750000,  dmg: 215, shot: 115, spd: 102, castK: 2.10, armor: 0.44, target: 312, farMax: 1.0 },
+    kyogre:   { hp: 8100000,  dmg: 265, shot: 145, spd: 106, castK: 2.35, armor: 0.50, target: 338, farMax: 1.3 },
+    rayquaza: { hp: 9450000,  dmg: 315, shot: 175, spd: 130, castK: 2.60, armor: 0.56, target: 363, farMax: 0.8 },
+    deoxys:   { hp: 10800000, dmg: 375, shot: 210, spd: 145, castK: 2.95, armor: 0.62, target: 388, farMax: 0.7 }
   };
   function teamHp(n) { return [1, 1, 1.8, 2.5, 3.2][Math.max(1, Math.min(4, n))]; }
   function teamDmg(n) { return 1 + 0.15 * (Math.max(1, Math.min(4, n)) - 1); }
